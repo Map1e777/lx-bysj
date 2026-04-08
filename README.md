@@ -1,6 +1,6 @@
 # 文档在线协作与版本管理系统
 
-基于 **Vue3 + Node.js + SQLite** 的文档在线协作与版本管理系统。
+基于 **Vue3 + Node.js + MySQL** 的文档在线协作与版本管理系统。
 
 ## 技术栈
 
@@ -14,7 +14,7 @@
 
 **后端**
 - Node.js + Express 4
-- better-sqlite3（SQLite 数据库）
+- mysql2（MySQL 数据库驱动）
 - jsonwebtoken（JWT 认证）
 - bcryptjs（密码加密）
 - Socket.io（实时通知）
@@ -32,17 +32,25 @@
 
 ## 快速开始
 
-### 1. 启动后端
+### 1. 准备数据库
+
+在 MySQL 中创建数据库：
+
+```sql
+CREATE DATABASE doccollab CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
+
+### 2. 启动后端
 
 ```bash
 cd server
-cp .env.example .env    # 复制环境变量配置
+cp .env.example .env    # 复制环境变量配置，填写 DB_HOST/DB_USER/DB_PASSWORD
 npm install
-node db/seed.js          # 初始化数据库并生成测试数据
-npm run dev              # 启动开发服务器（端口 3000）
+npm run dev              # 启动开发服务器（端口 3000，自动建表）
+node db/seed.js          # 写入测试数据（另开终端执行一次即可）
 ```
 
-### 2. 启动前端
+### 3. 启动前端
 
 ```bash
 cd client
@@ -50,18 +58,51 @@ npm install
 npm run dev              # 启动开发服务器（端口 5173）
 ```
 
-### 3. 访问系统
+### 4. 访问系统
 
 打开浏览器访问 http://localhost:5173
 
 ## 测试账号
 
-| 角色 | 邮箱 | 密码 |
-|------|------|------|
-| 系统管理员 | admin@example.com | admin123 |
-| 组织管理员 | orgadmin@example.com | admin123 |
-| 文档创作者 | creator@example.com | admin123 |
-| 文档协作者 | collab@example.com | admin123 |
+所有账号密码均为 `admin123`。
+
+| 角色 | 邮箱 | 所属部门 |
+|------|------|---------|
+| 系统管理员 | admin@example.com | — |
+| 组织管理员 | orgadmin@example.com | 技术部 |
+| 文档创作者 | creator@example.com | 技术部 |
+| 文档协作者 | collab@example.com | 产品部 |
+| 普通成员 | user2@example.com | 运营部 |
+| 普通成员 | user3@example.com | 前端组 |
+
+## 初始化数据说明
+
+执行 `node db/seed.js` 后写入以下示例数据：
+
+**组织与部门**
+- 组织：示例组织（slug: `example-org`）
+- 部门：技术部、产品部、运营部，以及技术部下的子部门前端组
+
+**文档（5篇）**
+
+| 标题 | 状态 | 可见性 | 所有者 |
+|------|------|--------|--------|
+| 欢迎使用文档协作系统 | 已发布 | 组织内 | creator |
+| 2024 年度产品路线图 | 已发布 | 组织内 | orgadmin |
+| 技术架构设计文档 | 草稿 | 私有 | creator |
+| 季度运营报告 | 已发布 | 公开 | user2 |
+| 内部培训材料 | 已归档 | 组织内 | orgadmin |
+
+每篇文档附有 2–3 个历史版本。
+
+**其他数据**
+- 评论：欢迎文档上 4 条（含已解决线程与回复）
+- 通知：5 条（document_shared、comment_added、invitation_accepted 类型）
+- 邀请：1 条 pending + 1 条 accepted
+- 审计日志：6 条（login、create、publish、update 等操作）
+- 权限模板：全局只读模板、组织协作模板
+
+> seed 脚本是幂等的，重复执行不会产生重复数据。
 
 ## 项目结构
 
