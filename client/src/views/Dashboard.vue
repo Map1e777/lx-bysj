@@ -8,6 +8,21 @@
           <el-tag :type="roleTagType" size="small">{{ roleLabel }}</el-tag>
           今天是 {{ today }}，专注工作，高效协作！
         </p>
+        <div class="role-matrix-line">
+          <el-tag
+            v-for="badge in authStore.roleBadges"
+            :key="badge.code"
+            :type="badgeType(badge.code)"
+            effect="plain"
+            size="small"
+          >
+            {{ badge.label }}
+          </el-tag>
+          <span class="matrix-hint">
+            创作 {{ authStore.user?.role_profile?.stats?.owned_document_count || 0 }} 篇 ·
+            协作 {{ authStore.user?.role_profile?.stats?.collaborated_document_count || 0 }} 篇
+          </span>
+        </div>
       </div>
       <el-button type="primary" @click="router.push('/documents/new')">
         <el-icon><Plus /></el-icon>
@@ -180,9 +195,7 @@ const today = computed(() => {
 })
 
 const roleLabel = computed(() => {
-  if (authStore.isSystemAdmin) return '系统管理员'
-  if (authStore.isOrgAdmin) return '组织管理员'
-  return '文档用户'
+  return authStore.primaryRoleLabel
 })
 
 const roleTagType = computed(() => {
@@ -216,6 +229,17 @@ const quickActions = computed(() => {
 function statusTagType(status: string) {
   const map: Record<string, string> = { draft: 'info', published: 'success', archived: 'warning' }
   return map[status] || 'info'
+}
+
+function badgeType(code: string) {
+  const map: Record<string, string> = {
+    system_admin: 'danger',
+    org_admin: 'warning',
+    doc_creator: 'success',
+    doc_collaborator: 'primary',
+    user: 'info'
+  }
+  return map[code] || 'info'
 }
 
 function statusLabel(status: string) {
@@ -351,6 +375,19 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.role-matrix-line {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.matrix-hint {
+  font-size: 12px;
+  color: #909399;
 }
 
 .stats-row {

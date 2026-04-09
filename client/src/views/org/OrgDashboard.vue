@@ -2,6 +2,7 @@
   <div class="page-container">
     <div class="page-header">
       <h2 class="page-title">组织概览</h2>
+      <el-tag v-if="orgName" type="warning">{{ orgName }}</el-tag>
     </div>
 
     <!-- Stats -->
@@ -75,6 +76,7 @@ import { orgApi } from '@/api/org'
 const router = useRouter()
 const activityLoading = ref(false)
 const activities = ref<any[]>([])
+const orgName = ref('')
 
 const statsCards = ref([
   { label: '组织成员', value: 0, icon: 'UserFilled', color: '#409eff' },
@@ -117,6 +119,7 @@ async function loadStats() {
   try {
     const res = await orgApi.getOrgStats() as any
     const stats = res.data || {}
+    orgName.value = stats.org_context?.name || stats.org?.name || ''
     statsCards.value[0].value = stats.member_count ?? stats.stats?.member_count ?? 0
     statsCards.value[1].value = stats.dept_count ?? stats.department_count ?? stats.stats?.department_count ?? 0
     statsCards.value[2].value = stats.document_count ?? stats.stats?.document_count ?? 0

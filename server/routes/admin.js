@@ -5,9 +5,21 @@ const { authenticateToken } = require('../middleware/auth')
 const { requireRole } = require('../middleware/roles')
 const { parsePagination, paginatedResponse } = require('../utils/pagination')
 const { hashPassword } = require('../utils/hash')
+const { formatRoleProfile } = require('../utils/roleProfile')
 
 router.use(authenticateToken)
 router.use(requireRole('system_admin'))
+
+function withRoleProfile(user) {
+  return {
+    ...user,
+    role_profile: formatRoleProfile(
+      user,
+      user.owned_document_count || 0,
+      user.collaborated_document_count || 0
+    )
+  }
+}
 
 // ===== USER MANAGEMENT =====
 
@@ -15,7 +27,7 @@ router.use(requireRole('system_admin'))
 router.get('/users', async (req, res) => {
   try {
     const { page, limit, offset } = parsePagination(req.query)
-    const { search, system_role, is_active, org_id } = req.query
+    const { search, system_role, is_active, org_id, role_code } = req.query
 
     const conditions = []
     const params = []
@@ -30,6 +42,21 @@ router.get('/users', async (req, res) => {
       params.push(parseInt(is_active))
     }
     if (org_id) { conditions.push('u.org_id = ?'); params.push(parseInt(org_id)) }
+    if (role_code === 'org_admin') {
+      conditions.push("u.org_role = 'org_admin'")
+    }
+    if (role_code === 'doc_creator') {
+      conditions.push('EXISTS (SELECT 1 FROM documents d WHERE d.owner_id = u.id AND d.deleted_at IS NULL)')
+    }
+    if (role_code === 'doc_collaborator') {
+      conditions.push("EXISTS (SELECT 1 FROM document_permissions dp WHERE dp.user_id = u.id AND dp.role IN ('editor', 'commenter', 'viewer'))")
+    }
+    if (role_code === 'user') {
+      conditions.push("u.system_role <> 'system_admin'")
+      conditions.push("(u.org_role IS NULL OR u.org_role <> 'org_admin')")
+      conditions.push('NOT EXISTS (SELECT 1 FROM documents d WHERE d.owner_id = u.id AND d.deleted_at IS NULL)')
+      conditions.push("NOT EXISTS (SELECT 1 FROM document_permissions dp WHERE dp.user_id = u.id AND dp.role IN ('editor', 'commenter', 'viewer'))")
+    }
 
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
     const countRow = await db.get(`SELECT COUNT(*) as count FROM users u ${where}`, params)
@@ -38,7 +65,9 @@ router.get('/users', async (req, res) => {
     const users = await db.all(`
       SELECT u.id, u.username, u.email, u.system_role, u.org_id, u.org_role,
              u.avatar_url, u.is_active, u.last_login_at, u.created_at,
-             o.name as org_name
+             o.name as org_name,
+             (SELECT COUNT(*) FROM documents d WHERE d.owner_id = u.id AND d.deleted_at IS NULL) as owned_document_count,
+             (SELECT COUNT(*) FROM document_permissions dp WHERE dp.user_id = u.id AND dp.role IN ('editor', 'commenter', 'viewer')) as collaborated_document_count
       FROM users u
       LEFT JOIN orgs o ON u.org_id = o.id
       ${where}
@@ -46,7 +75,11 @@ router.get('/users', async (req, res) => {
       LIMIT ? OFFSET ?
     `, [...params, limit, offset])
 
-    return res.json({ code: 200, message: 'success', data: paginatedResponse(users, total, page, limit) })
+    return res.json({
+      code: 200,
+      message: 'success',
+      data: paginatedResponse(users.map(withRoleProfile), total, page, limit)
+    })
   } catch (err) {
     console.error('Admin list users error:', err)
     return res.status(500).json({ code: 500, message: '服务器错误' })
@@ -477,26 +510,45 @@ router.put('/version-rules', async (req, res) => {
 router.get('/audit-logs', async (req, res) => {
   try {
     const { page, limit, offset } = parsePagination(req.query)
-    const { actor_id, action, resource_type, from_date, to_date, start_date, end_date, actor } = req.query
+    const { actor_id, action, resource_type, from_date, to_date, start_date, end_date, actor, org_id } = req.query
 
     const conditions = []
     const params = []
 
     if (actor_id) { conditions.push('al.actor_id = ?'); params.push(parseInt(actor_id)) }
-    if (actor) { conditions.push('u.username LIKE ?'); params.push(`%${actor}%`) }
+    if (actor) { conditions.push('actor_u.username LIKE ?'); params.push(`%${actor}%`) }
     if (action) { conditions.push('al.action LIKE ?'); params.push(`%${action}%`) }
     if (resource_type) { conditions.push('al.resource_type = ?'); params.push(resource_type) }
     if (from_date || start_date) { conditions.push('al.created_at >= ?'); params.push(from_date || start_date) }
     if (to_date || end_date) { conditions.push('al.created_at <= ?'); params.push(to_date || end_date) }
+    if (org_id) {
+      conditions.push('(doc.org_id = ? OR actor_u.org_id = ? OR resource_org.id = ?)')
+      params.push(parseInt(org_id), parseInt(org_id), parseInt(org_id))
+    }
 
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
-    const countRow = await db.get(`SELECT COUNT(*) as count FROM audit_logs al ${where}`, params)
+    const countRow = await db.get(`
+      SELECT COUNT(*) as count
+      FROM audit_logs al
+      LEFT JOIN users actor_u ON al.actor_id = actor_u.id
+      LEFT JOIN documents doc ON al.resource_type = 'document' AND CAST(al.resource_id AS UNSIGNED) = doc.id
+      LEFT JOIN orgs resource_org ON al.resource_type = 'org' AND CAST(al.resource_id AS UNSIGNED) = resource_org.id
+      ${where}
+    `, params)
     const total = countRow.count
 
     const logs = await db.all(`
-      SELECT al.*, u.username as actor_username
+      SELECT al.*,
+             actor_u.username as actor_username,
+             doc.title as document_title,
+             COALESCE(doc.org_id, actor_u.org_id, resource_org.id) as org_id,
+             COALESCE(doc_org.name, actor_org.name, resource_org.name) as org_name
       FROM audit_logs al
-      LEFT JOIN users u ON al.actor_id = u.id
+      LEFT JOIN users actor_u ON al.actor_id = actor_u.id
+      LEFT JOIN documents doc ON al.resource_type = 'document' AND CAST(al.resource_id AS UNSIGNED) = doc.id
+      LEFT JOIN orgs actor_org ON actor_u.org_id = actor_org.id
+      LEFT JOIN orgs doc_org ON doc.org_id = doc_org.id
+      LEFT JOIN orgs resource_org ON al.resource_type = 'org' AND CAST(al.resource_id AS UNSIGNED) = resource_org.id
       ${where}
       ORDER BY al.created_at DESC
       LIMIT ? OFFSET ?
@@ -514,28 +566,134 @@ router.get('/audit-logs', async (req, res) => {
 // GET /api/admin/stats
 router.get('/stats', async (req, res) => {
   try {
+    const scopedOrgId = req.query.org_id ? parseInt(req.query.org_id) : null
+    const userWhere = scopedOrgId ? 'WHERE org_id = ?' : ''
+    const userParams = scopedOrgId ? [scopedOrgId] : []
+    const docWhere = scopedOrgId ? 'WHERE org_id = ? AND deleted_at IS NULL' : 'WHERE deleted_at IS NULL'
+    const docParams = scopedOrgId ? [scopedOrgId] : []
+    const publishedDocWhere = scopedOrgId
+      ? "WHERE org_id = ? AND status = 'published' AND deleted_at IS NULL"
+      : "WHERE status = 'published' AND deleted_at IS NULL"
+    const recentUserWhere = scopedOrgId
+      ? 'WHERE org_id = ? AND created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)'
+      : 'WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)'
+    const recentDocWhere = scopedOrgId
+      ? 'WHERE org_id = ? AND created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) AND deleted_at IS NULL'
+      : 'WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) AND deleted_at IS NULL'
+
     const [
       totalUsers, activeUsers, totalOrgs, totalDocs, publishedDocs,
       totalVersions, totalComments, totalAttachments, unreadNotifications,
-      recentUsers, recentDocs
+      recentUsers, recentDocs, orgContext, orgBreakdown, roleDistribution,
+      storageUsage, activeToday
     ] = await Promise.all([
-      db.get('SELECT COUNT(*) as count FROM users'),
-      db.get('SELECT COUNT(*) as count FROM users WHERE is_active = 1'),
-      db.get('SELECT COUNT(*) as count FROM orgs'),
-      db.get('SELECT COUNT(*) as count FROM documents WHERE deleted_at IS NULL'),
-      db.get("SELECT COUNT(*) as count FROM documents WHERE status = 'published' AND deleted_at IS NULL"),
-      db.get('SELECT COUNT(*) as count FROM document_versions'),
-      db.get('SELECT COUNT(*) as count FROM comments WHERE deleted_at IS NULL'),
-      db.get('SELECT COUNT(*) as count FROM attachments'),
-      db.get('SELECT COUNT(*) as count FROM notifications WHERE is_read = 0'),
-      db.get('SELECT COUNT(*) as count FROM users WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)'),
-      db.get('SELECT COUNT(*) as count FROM documents WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) AND deleted_at IS NULL')
+      db.get(`SELECT COUNT(*) as count FROM users ${userWhere}`, userParams),
+      db.get(
+        `SELECT COUNT(*) as count FROM users ${scopedOrgId ? 'WHERE org_id = ? AND is_active = 1' : 'WHERE is_active = 1'}`,
+        userParams
+      ),
+      db.get(scopedOrgId ? 'SELECT COUNT(*) as count FROM orgs WHERE id = ?' : 'SELECT COUNT(*) as count FROM orgs', scopedOrgId ? [scopedOrgId] : []),
+      db.get(`SELECT COUNT(*) as count FROM documents ${docWhere}`, docParams),
+      db.get(`SELECT COUNT(*) as count FROM documents ${publishedDocWhere}`, docParams),
+      db.get(
+        scopedOrgId
+          ? 'SELECT COUNT(*) as count FROM document_versions dv INNER JOIN documents d ON dv.document_id = d.id WHERE d.org_id = ? AND d.deleted_at IS NULL'
+          : 'SELECT COUNT(*) as count FROM document_versions',
+        docParams
+      ),
+      db.get(
+        scopedOrgId
+          ? 'SELECT COUNT(*) as count FROM comments c INNER JOIN documents d ON c.document_id = d.id WHERE d.org_id = ? AND c.deleted_at IS NULL AND d.deleted_at IS NULL'
+          : 'SELECT COUNT(*) as count FROM comments WHERE deleted_at IS NULL',
+        docParams
+      ),
+      db.get(
+        scopedOrgId
+          ? 'SELECT COUNT(*) as count FROM attachments a INNER JOIN documents d ON a.document_id = d.id WHERE d.org_id = ? AND d.deleted_at IS NULL'
+          : 'SELECT COUNT(*) as count FROM attachments',
+        docParams
+      ),
+      db.get(
+        scopedOrgId
+          ? 'SELECT COUNT(*) as count FROM notifications n INNER JOIN users u ON n.user_id = u.id WHERE u.org_id = ? AND n.is_read = 0'
+          : 'SELECT COUNT(*) as count FROM notifications WHERE is_read = 0',
+        userParams
+      ),
+      db.get(`SELECT COUNT(*) as count FROM users ${recentUserWhere}`, userParams),
+      db.get(`SELECT COUNT(*) as count FROM documents ${recentDocWhere}`, docParams),
+      scopedOrgId ? db.get('SELECT id, name, slug, description FROM orgs WHERE id = ?', [scopedOrgId]) : Promise.resolve(null),
+      db.all(`
+        SELECT o.id, o.name,
+               COUNT(DISTINCT u.id) as user_count,
+               COUNT(DISTINCT d.id) as document_count,
+               COUNT(DISTINCT dv.id) as version_count
+        FROM orgs o
+        LEFT JOIN users u ON u.org_id = o.id
+        LEFT JOIN documents d ON d.org_id = o.id AND d.deleted_at IS NULL
+        LEFT JOIN document_versions dv ON dv.document_id = d.id
+        ${scopedOrgId ? 'WHERE o.id = ?' : ''}
+        GROUP BY o.id, o.name
+        ORDER BY document_count DESC, user_count DESC, o.id ASC
+        LIMIT 10
+      `, scopedOrgId ? [scopedOrgId] : []),
+      Promise.all([
+        db.get(`SELECT COUNT(*) as count FROM users ${scopedOrgId ? "WHERE org_id = ? AND system_role = 'system_admin'" : "WHERE system_role = 'system_admin'"} `, userParams),
+        db.get(`SELECT COUNT(*) as count FROM users ${scopedOrgId ? "WHERE org_id = ? AND org_role = 'org_admin'" : "WHERE org_role = 'org_admin'"} `, userParams),
+        db.get(
+          scopedOrgId
+            ? 'SELECT COUNT(DISTINCT owner_id) as count FROM documents WHERE org_id = ? AND deleted_at IS NULL'
+            : 'SELECT COUNT(DISTINCT owner_id) as count FROM documents WHERE deleted_at IS NULL',
+          docParams
+        ),
+        db.get(
+          scopedOrgId
+            ? "SELECT COUNT(DISTINCT dp.user_id) as count FROM document_permissions dp INNER JOIN documents d ON dp.document_id = d.id WHERE d.org_id = ? AND d.deleted_at IS NULL AND dp.role IN ('editor', 'commenter', 'viewer')"
+            : "SELECT COUNT(DISTINCT user_id) as count FROM document_permissions WHERE role IN ('editor', 'commenter', 'viewer')",
+          docParams
+        ),
+        db.get(
+          `
+            SELECT COUNT(*) as count
+            FROM users u
+            WHERE ${scopedOrgId ? 'u.org_id = ? AND' : ''}
+                  u.system_role <> 'system_admin'
+              AND (u.org_role IS NULL OR u.org_role <> 'org_admin')
+              AND NOT EXISTS (SELECT 1 FROM documents d WHERE d.owner_id = u.id AND d.deleted_at IS NULL ${scopedOrgId ? 'AND d.org_id = ?' : ''})
+              AND NOT EXISTS (
+                SELECT 1
+                FROM document_permissions dp
+                INNER JOIN documents d2 ON dp.document_id = d2.id
+                WHERE dp.user_id = u.id
+                  AND dp.role IN ('editor', 'commenter', 'viewer')
+                  ${scopedOrgId ? 'AND d2.org_id = ?' : ''}
+                  AND d2.deleted_at IS NULL
+              )
+          `,
+          scopedOrgId ? [scopedOrgId, scopedOrgId, scopedOrgId] : []
+        )
+      ]),
+      db.get(
+        scopedOrgId
+          ? 'SELECT COALESCE(SUM(a.file_size), 0) as total_size FROM attachments a INNER JOIN documents d ON a.document_id = d.id WHERE d.org_id = ? AND d.deleted_at IS NULL'
+          : 'SELECT COALESCE(SUM(file_size), 0) as total_size FROM attachments',
+        docParams
+      ),
+      db.get(
+        scopedOrgId
+          ? 'SELECT COUNT(*) as count FROM users WHERE org_id = ? AND last_login_at >= CURDATE()'
+          : 'SELECT COUNT(*) as count FROM users WHERE last_login_at >= CURDATE()',
+        userParams
+      )
     ])
+
+    const [systemAdmins, orgAdmins, docCreators, docCollaborators, plainUsers] = roleDistribution
 
     return res.json({
       code: 200,
       message: 'success',
       data: {
+        org_id: scopedOrgId,
+        org_context: orgContext,
         total_users: totalUsers.count,
         active_users: activeUsers.count,
         total_orgs: totalOrgs.count,
@@ -547,6 +705,16 @@ router.get('/stats', async (req, res) => {
         unread_notifications: unreadNotifications.count,
         users_recent_7d: recentUsers.count,
         documents_recent_7d: recentDocs.count,
+        storage_used: `${(Number(storageUsage.total_size || 0) / 1024 / 1024).toFixed(1)} MB`,
+        active_today: activeToday.count,
+        role_distribution: {
+          system_admin: systemAdmins.count,
+          org_admin: orgAdmins.count,
+          doc_creator: docCreators.count,
+          doc_collaborator: docCollaborators.count,
+          user: plainUsers.count
+        },
+        org_breakdown: orgBreakdown,
         users: { total: totalUsers.count, active: activeUsers.count, recent_7d: recentUsers.count },
         organizations: { total: totalOrgs.count },
         documents: { total: totalDocs.count, published: publishedDocs.count, recent_7d: recentDocs.count },

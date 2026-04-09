@@ -11,6 +11,15 @@ interface User {
   org_id: number | null
   org_role: string | null
   avatar_url: string | null
+  role_profile?: {
+    primary_code: string
+    primary_label: string
+    badges: Array<{ code: string; label: string; scope: string }>
+    stats?: {
+      owned_document_count: number
+      collaborated_document_count: number
+    }
+  }
 }
 
 export const useAuthStore = defineStore('auth', () => {
@@ -20,6 +29,8 @@ export const useAuthStore = defineStore('auth', () => {
   const isLoggedIn = computed(() => !!token.value && !!user.value)
   const isSystemAdmin = computed(() => user.value?.system_role === 'system_admin')
   const isOrgAdmin = computed(() => user.value?.org_role === 'org_admin' || user.value?.system_role === 'system_admin')
+  const primaryRoleLabel = computed(() => user.value?.role_profile?.primary_label || (isSystemAdmin.value ? '系统管理员' : isOrgAdmin.value ? '组织管理员' : '普通用户'))
+  const roleBadges = computed(() => user.value?.role_profile?.badges || [])
 
   async function login(email: string, password: string) {
     const res = await authApi.login({ email, password }) as any
@@ -35,6 +46,7 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = null
     localStorage.removeItem('token')
     localStorage.removeItem('user')
+    localStorage.removeItem('selected_org_id')
     disconnectSocket()
   }
 
@@ -76,6 +88,8 @@ export const useAuthStore = defineStore('auth', () => {
     isLoggedIn,
     isSystemAdmin,
     isOrgAdmin,
+    primaryRoleLabel,
+    roleBadges,
     login,
     logout,
     loadFromStorage,

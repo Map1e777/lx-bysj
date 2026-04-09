@@ -85,8 +85,12 @@
             <span class="demo-cred">orgadmin@example.com / admin123</span>
           </div>
           <div class="demo-account-item">
-            <span class="demo-role">普通用户：</span>
-            <span class="demo-cred">user@example.com / user123</span>
+            <span class="demo-role">文档创作者：</span>
+            <span class="demo-cred">creator@example.com / admin123</span>
+          </div>
+          <div class="demo-account-item">
+            <span class="demo-role">文档协作者：</span>
+            <span class="demo-cred">collab@example.com / admin123</span>
           </div>
         </div>
       </el-alert>

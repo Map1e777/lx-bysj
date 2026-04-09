@@ -4,6 +4,7 @@ const { db } = require('../db')
 const { hashPassword, comparePassword } = require('../utils/hash')
 const { signToken } = require('../utils/jwt')
 const { authenticateToken } = require('../middleware/auth')
+const { buildRoleProfile } = require('../utils/roleProfile')
 
 // POST /api/auth/register
 router.post('/register', async (req, res) => {
@@ -44,6 +45,7 @@ router.post('/register', async (req, res) => {
       'SELECT id, username, email, system_role, org_id, org_role, avatar_url, created_at FROM users WHERE id = ?',
       [result.insertId]
     )
+    user.role_profile = await buildRoleProfile(db, user)
 
     const token = signToken({ id: user.id, username: user.username, email: user.email })
 
@@ -87,6 +89,7 @@ router.post('/login', async (req, res) => {
 
     const { password_hash, ...safeUser } = user
     safeUser.last_login_at = new Date().toISOString()
+    safeUser.role_profile = await buildRoleProfile(db, safeUser)
 
     return res.json({
       code: 200,
@@ -111,6 +114,7 @@ router.get('/me', authenticateToken, async (req, res) => {
       return res.status(404).json({ code: 404, message: '用户不存在' })
     }
 
+    user.role_profile = await buildRoleProfile(db, user)
     return res.json({ code: 200, message: 'success', data: user })
   } catch (err) {
     console.error('Get me error:', err)

@@ -599,12 +599,12 @@ function statusLabel(status: string) {
 }
 
 function roleTagType(role: string) {
-  const map: Record<string, string> = { owner: 'warning', editor: 'success', commenter: 'primary', viewer: 'info' }
+  const map: Record<string, string> = { creator: 'warning', editor: 'success', commenter: 'primary', viewer: 'info' }
   return map[role] || 'info'
 }
 
 function roleLabel(role: string) {
-  const map: Record<string, string> = { owner: '所有者', editor: '编辑者', commenter: '评论者', viewer: '查看者' }
+  const map: Record<string, string> = { creator: '创建者', editor: '编辑者', commenter: '评论者', viewer: '查看者' }
   return map[role] || role
 }
 

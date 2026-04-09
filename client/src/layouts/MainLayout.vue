@@ -152,6 +152,22 @@
 
         <!-- Right Actions -->
         <div class="header-actions">
+          <el-select
+            v-if="authStore.isSystemAdmin"
+            v-model="selectedOrgId"
+            placeholder="组织上下文"
+            size="small"
+            style="width: 180px"
+            @change="handleOrgContextChange"
+          >
+            <el-option
+              v-for="org in orgOptions"
+              :key="org.id"
+              :label="org.name"
+              :value="org.id"
+            />
+          </el-select>
+
           <!-- Create Document Button -->
           <el-button type="primary" size="small" @click="router.push('/documents/new')">
             <el-icon><Plus /></el-icon>
@@ -204,17 +220,22 @@ import { useRouter, useRoute } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { useNotifStore } from '@/stores/useNotifStore'
+import { useOrgContextStore } from '@/stores/useOrgContextStore'
 import { getSocket } from '@/utils/socket'
 import NotifBell from '@/components/NotifBell.vue'
+import { adminApi } from '@/api/admin'
 
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
 const notifStore = useNotifStore()
+const orgContextStore = useOrgContextStore()
 
 const isCollapsed = ref(false)
 const searchQuery = ref('')
 const pendingCount = ref(0)
+const orgOptions = ref<any[]>([])
+const selectedOrgId = ref<number | null>(null)
 
 const activeMenu = computed(() => {
   const path = route.path
@@ -242,6 +263,30 @@ function handleUserCommand(command: string) {
   }
 }
 
+async function loadOrgOptions() {
+  if (!authStore.isSystemAdmin) return
+  try {
+    const res = await adminApi.getOrgs({ limit: 1000 }) as any
+    orgOptions.value = res.data?.list || []
+    orgContextStore.loadFromStorage()
+    if (orgContextStore.selectedOrgId) {
+      selectedOrgId.value = orgContextStore.selectedOrgId
+    } else if (orgOptions.value.length > 0) {
+      selectedOrgId.value = orgOptions.value[0].id
+      orgContextStore.setSelectedOrgId(orgOptions.value[0].id)
+    }
+  } catch (e) {
+    console.error(e)
+  }
+}
+
+function handleOrgContextChange(value: number) {
+  orgContextStore.setSelectedOrgId(value || null)
+  if (route.path.startsWith('/org')) {
+    router.go(0)
+  }
+}
+
 // Setup socket listeners for real-time notifications
 function setupSocketListeners() {
   const socket = getSocket()
@@ -255,6 +300,7 @@ function setupSocketListeners() {
 onMounted(() => {
   notifStore.fetchUnreadCount()
   setupSocketListeners()
+  loadOrgOptions()
 })
 </script>
 

@@ -8,21 +8,45 @@ const { parsePagination, paginatedResponse } = require('../utils/pagination')
 router.use(authenticateToken)
 router.use(requireRole('org_admin'))
 
-function ensureOrgContext(req, res) {
+async function ensureOrgContext(req, res) {
+  if (req.user.system_role === 'system_admin') {
+    const headerOrgId = Number(req.headers['x-org-id'])
+    const queryOrgId = Number(req.query.org_id || req.body?.org_id)
+    const requestedOrgId = headerOrgId || queryOrgId || req.user.org_id
+
+    let org = null
+    if (requestedOrgId) {
+      org = await db.get('SELECT id, name FROM orgs WHERE id = ?', [requestedOrgId])
+    }
+    if (!org) {
+      org = await db.get('SELECT id, name FROM orgs ORDER BY id ASC LIMIT 1')
+    }
+    if (!org) {
+      res.status(400).json({ code: 400, message: '当前没有可用的组织上下文' })
+      return false
+    }
+    req.orgContext = org
+    req.orgContextId = org.id
+    return true
+  }
+
   if (!req.user.org_id) {
     res.status(400).json({ code: 400, message: '您不属于任何组织' })
     return false
   }
+
+  req.orgContextId = req.user.org_id
+  req.orgContext = await db.get('SELECT id, name FROM orgs WHERE id = ?', [req.user.org_id])
   return true
 }
 
 // GET /api/org/members
 router.get('/members', async (req, res) => {
-  if (!ensureOrgContext(req, res)) return
+  if (!(await ensureOrgContext(req, res))) return
   try {
     const { page, limit, offset } = parsePagination(req.query)
     const { search, org_role, dept_id } = req.query
-    const orgId = req.user.org_id
+    const orgId = req.orgContextId
 
     const conditions = ['u.org_id = ?']
     const params = [orgId]
@@ -58,10 +82,10 @@ router.get('/members', async (req, res) => {
 
 // POST /api/org/members/invite
 router.post('/members/invite', async (req, res) => {
-  if (!ensureOrgContext(req, res)) return
+  if (!(await ensureOrgContext(req, res))) return
   try {
     const { email, org_role, role, dept_id } = req.body
-    const orgId = req.user.org_id
+    const orgId = req.orgContextId
     const normalizedRole = org_role || role || 'member'
 
     if (!email) {
@@ -95,10 +119,10 @@ router.post('/members/invite', async (req, res) => {
 
 // DELETE /api/org/members/:uid
 router.delete('/members/:uid', async (req, res) => {
-  if (!ensureOrgContext(req, res)) return
+  if (!(await ensureOrgContext(req, res))) return
   try {
     const targetId = req.params.uid
-    const orgId = req.user.org_id
+    const orgId = req.orgContextId
 
     const user = await db.get('SELECT * FROM users WHERE id = ? AND org_id = ?', [targetId, orgId])
     if (!user) {
@@ -121,11 +145,11 @@ router.delete('/members/:uid', async (req, res) => {
 
 // PUT /api/org/members/:uid/role
 router.put('/members/:uid/role', async (req, res) => {
-  if (!ensureOrgContext(req, res)) return
+  if (!(await ensureOrgContext(req, res))) return
   try {
     const { org_role, role, dept_id } = req.body
     const targetId = req.params.uid
-    const orgId = req.user.org_id
+    const orgId = req.orgContextId
     const normalizedRole = org_role || role
 
     if (!normalizedRole) {
@@ -154,9 +178,9 @@ router.put('/members/:uid/role', async (req, res) => {
 
 // GET /api/org/departments
 router.get('/departments', async (req, res) => {
-  if (!ensureOrgContext(req, res)) return
+  if (!(await ensureOrgContext(req, res))) return
   try {
-    const orgId = req.user.org_id
+    const orgId = req.orgContextId
 
     const depts = await db.all(`
       SELECT d.id, d.parent_id, d.name, d.created_at,
@@ -188,10 +212,10 @@ router.get('/departments', async (req, res) => {
 
 // POST /api/org/departments
 router.post('/departments', async (req, res) => {
-  if (!ensureOrgContext(req, res)) return
+  if (!(await ensureOrgContext(req, res))) return
   try {
     const { name, parent_id } = req.body
-    const orgId = req.user.org_id
+    const orgId = req.orgContextId
 
     if (!name || !name.trim()) {
       return res.status(400).json({ code: 400, message: '部门名称不能为空' })
@@ -219,10 +243,10 @@ router.post('/departments', async (req, res) => {
 
 // PUT /api/org/departments/:id
 router.put('/departments/:id', async (req, res) => {
-  if (!ensureOrgContext(req, res)) return
+  if (!(await ensureOrgContext(req, res))) return
   try {
     const { name, parent_id } = req.body
-    const orgId = req.user.org_id
+    const orgId = req.orgContextId
 
     const dept = await db.get('SELECT * FROM departments WHERE id = ? AND org_id = ?', [req.params.id, orgId])
     if (!dept) {
@@ -252,9 +276,9 @@ router.put('/departments/:id', async (req, res) => {
 
 // DELETE /api/org/departments/:id
 router.delete('/departments/:id', async (req, res) => {
-  if (!ensureOrgContext(req, res)) return
+  if (!(await ensureOrgContext(req, res))) return
   try {
-    const orgId = req.user.org_id
+    const orgId = req.orgContextId
 
     const dept = await db.get('SELECT * FROM departments WHERE id = ? AND org_id = ?', [req.params.id, orgId])
     if (!dept) {
@@ -274,11 +298,11 @@ router.delete('/departments/:id', async (req, res) => {
 
 // GET /api/org/documents
 router.get('/documents', async (req, res) => {
-  if (!ensureOrgContext(req, res)) return
+  if (!(await ensureOrgContext(req, res))) return
   try {
     const { page, limit, offset } = parsePagination(req.query)
     const { status, search, dept_id } = req.query
-    const orgId = req.user.org_id
+    const orgId = req.orgContextId
 
     const conditions = ['d.org_id = ?', 'd.deleted_at IS NULL']
     const params = [orgId]
@@ -317,10 +341,10 @@ router.get('/documents', async (req, res) => {
 
 // PUT /api/org/documents/:id/archive
 router.put('/documents/:id/archive', async (req, res) => {
-  if (!ensureOrgContext(req, res)) return
+  if (!(await ensureOrgContext(req, res))) return
   try {
     const doc = await db.get('SELECT id, org_id, status FROM documents WHERE id = ? AND deleted_at IS NULL', [req.params.id])
-    if (!doc || doc.org_id !== req.user.org_id) {
+    if (!doc || doc.org_id !== req.orgContextId) {
       return res.status(404).json({ code: 404, message: '文档不存在或不属于当前组织' })
     }
 
@@ -334,11 +358,11 @@ router.put('/documents/:id/archive', async (req, res) => {
 
 // GET /api/org/audit
 router.get('/audit', async (req, res) => {
-  if (!ensureOrgContext(req, res)) return
+  if (!(await ensureOrgContext(req, res))) return
   try {
     const { page, limit, offset } = parsePagination(req.query)
     const { start_date, end_date, doc_title, user_name } = req.query
-    const orgId = req.user.org_id
+    const orgId = req.orgContextId
 
     const orgMemberIds = (await db.all('SELECT id FROM users WHERE org_id = ?', [orgId])).map(u => u.id)
     if (orgMemberIds.length === 0) {
@@ -385,9 +409,9 @@ router.get('/audit', async (req, res) => {
 
 // GET /api/org/stats
 router.get('/stats', async (req, res) => {
-  if (!ensureOrgContext(req, res)) return
+  if (!(await ensureOrgContext(req, res))) return
   try {
-    const orgId = req.user.org_id
+    const orgId = req.orgContextId
 
     const [memberCount, docCount, publishedDocCount, deptCount, versionCount, newDocsThisMonth, org] = await Promise.all([
       db.get('SELECT COUNT(*) as count FROM users WHERE org_id = ?', [orgId]),
@@ -404,6 +428,7 @@ router.get('/stats', async (req, res) => {
       message: 'success',
       data: {
         org,
+        org_context: req.orgContext,
         member_count: memberCount.count,
         document_count: docCount.count,
         published_document_count: publishedDocCount.count,
@@ -428,9 +453,9 @@ router.get('/stats', async (req, res) => {
 
 // GET /api/org/audit/export
 router.get('/audit/export', async (req, res) => {
-  if (!ensureOrgContext(req, res)) return
+  if (!(await ensureOrgContext(req, res))) return
   try {
-    const orgId = req.user.org_id
+    const orgId = req.orgContextId
     const { start_date, end_date, doc_title, user_name } = req.query
     const orgMemberIds = (await db.all('SELECT id FROM users WHERE org_id = ?', [orgId])).map(u => u.id)
 
@@ -481,10 +506,10 @@ router.get('/audit/export', async (req, res) => {
 
 // PUT /api/org/settings
 router.put('/settings', async (req, res) => {
-  if (!ensureOrgContext(req, res)) return
+  if (!(await ensureOrgContext(req, res))) return
   try {
     const { name, description, logo_url, settings } = req.body
-    const orgId = req.user.org_id
+    const orgId = req.orgContextId
 
     const updates = ['updated_at = CURRENT_TIMESTAMP']
     const values = []

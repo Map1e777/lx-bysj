@@ -32,10 +32,28 @@
             <h3 class="profile-username">{{ authStore.user?.username }}</h3>
             <p class="profile-email">{{ authStore.user?.email }}</p>
             <div class="role-badges">
-              <el-tag :type="systemRoleType" size="default">{{ systemRoleLabel }}</el-tag>
-              <el-tag v-if="authStore.user?.org_role" type="warning" size="default">
-                {{ orgRoleLabel }}
+              <el-tag
+                v-for="badge in authStore.roleBadges"
+                :key="badge.code"
+                :type="badgeType(badge.code)"
+                size="default"
+              >
+                {{ badge.label }}
               </el-tag>
+            </div>
+            <div class="role-matrix-panel">
+              <div class="matrix-title">角色矩阵</div>
+              <div class="matrix-primary">{{ authStore.user?.role_profile?.primary_label || '普通用户' }}</div>
+              <div class="matrix-stats">
+                <div class="matrix-stat">
+                  <span class="matrix-stat-value">{{ authStore.user?.role_profile?.stats?.owned_document_count || 0 }}</span>
+                  <span class="matrix-stat-label">创作文档</span>
+                </div>
+                <div class="matrix-stat">
+                  <span class="matrix-stat-value">{{ authStore.user?.role_profile?.stats?.collaborated_document_count || 0 }}</span>
+                  <span class="matrix-stat-label">协作文档</span>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -163,20 +181,21 @@ const pwdForm = reactive({
   confirmPassword: ''
 })
 
-const systemRoleType = computed(() => {
-  if (authStore.user?.system_role === 'system_admin') return 'danger'
-  return 'info'
-})
-
-const systemRoleLabel = computed(() => {
-  if (authStore.user?.system_role === 'system_admin') return '系统管理员'
-  return '普通用户'
-})
-
 const orgRoleLabel = computed(() => {
   if (authStore.user?.org_role === 'org_admin') return '组织管理员'
   return '组织成员'
 })
+
+function badgeType(code: string) {
+  const map: Record<string, string> = {
+    system_admin: 'danger',
+    org_admin: 'warning',
+    doc_creator: 'success',
+    doc_collaborator: 'primary',
+    user: 'info'
+  }
+  return map[code] || 'info'
+}
 
 const profileRules = {
   username: [
@@ -279,6 +298,10 @@ async function handleAvatarUpload(options: any) {
 
 onMounted(() => {
   profileForm.username = authStore.user?.username || ''
+  userApi.getProfile().then((res: any) => {
+    orgName.value = res.data?.org_name || ''
+    authStore.updateUser(res.data || {})
+  }).catch(() => {})
 })
 </script>
 
@@ -347,6 +370,52 @@ onMounted(() => {
 .role-badges {
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
+}
+
+.role-matrix-panel {
+  width: 100%;
+  margin-top: 16px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #f8fbff 0%, #f5f7fa 100%);
+}
+
+.matrix-title {
+  font-size: 12px;
+  color: #909399;
+  margin-bottom: 6px;
+}
+
+.matrix-primary {
+  font-size: 18px;
+  font-weight: 600;
+  color: #303133;
+  margin-bottom: 12px;
+}
+
+.matrix-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.matrix-stat {
+  background: #fff;
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.matrix-stat-value {
+  display: block;
+  font-size: 20px;
+  font-weight: 700;
+  color: #409eff;
+}
+
+.matrix-stat-label {
+  font-size: 12px;
+  color: #909399;
 }
 
 .org-info-section {

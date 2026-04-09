@@ -7,10 +7,10 @@
     <!-- Filters -->
     <el-card shadow="never" class="filter-card">
       <el-row :gutter="16" align="middle">
-        <el-col :span="5">
+        <el-col :span="4">
           <el-input v-model="filters.actor" placeholder="操作人" clearable prefix-icon="User" />
         </el-col>
-        <el-col :span="5">
+        <el-col :span="4">
           <el-select v-model="filters.action" placeholder="操作类型" clearable style="width: 100%">
             <el-option label="用户登录" value="user_login" />
             <el-option label="用户注册" value="user_register" />
@@ -22,7 +22,7 @@
             <el-option label="邀请协作" value="invite_collaborator" />
           </el-select>
         </el-col>
-        <el-col :span="5">
+        <el-col :span="4">
           <el-select v-model="filters.resource_type" placeholder="资源类型" clearable style="width: 100%">
             <el-option label="用户" value="user" />
             <el-option label="文档" value="document" />
@@ -30,7 +30,12 @@
             <el-option label="组织" value="org" />
           </el-select>
         </el-col>
-        <el-col :span="7">
+        <el-col :span="4">
+          <el-select v-model="filters.org_id" placeholder="所属组织" clearable style="width: 100%">
+            <el-option v-for="org in orgs" :key="org.id" :label="org.name" :value="org.id" />
+          </el-select>
+        </el-col>
+        <el-col :span="6">
           <el-date-picker
             v-model="dateRange"
             type="daterange"
@@ -72,6 +77,11 @@
             <span>{{ resourceLabel(row.resource_type) }}</span>
           </template>
         </el-table-column>
+        <el-table-column label="所属组织" width="140">
+          <template #default="{ row }">
+            <span>{{ row.org_name || '-' }}</span>
+          </template>
+        </el-table-column>
         <el-table-column label="资源ID" width="90">
           <template #default="{ row }">
             <span class="id-text">{{ row.resource_id || '-' }}</span>
@@ -111,11 +121,12 @@ import { adminApi } from '@/api/admin'
 
 const loading = ref(false)
 const logs = ref<any[]>([])
+const orgs = ref<any[]>([])
 const total = ref(0)
 const currentPage = ref(1)
 const pageSize = ref(20)
 const dateRange = ref<Date[]>([])
-const filters = reactive({ actor: '', action: '', resource_type: '' })
+const filters = reactive({ actor: '', action: '', resource_type: '', org_id: undefined as number | undefined })
 
 async function loadLogs() {
   loading.value = true
@@ -126,6 +137,7 @@ async function loadLogs() {
       actor: filters.actor || undefined,
       action: filters.action || undefined,
       resource_type: filters.resource_type || undefined,
+      org_id: filters.org_id || undefined,
     }
     if (dateRange.value?.length === 2) {
       params.from_date = dateRange.value[0].toISOString().split('T')[0]
@@ -138,6 +150,15 @@ async function loadLogs() {
     ElMessage.error('加载审计日志失败')
   } finally {
     loading.value = false
+  }
+}
+
+async function loadOrgs() {
+  try {
+    const res = await adminApi.getOrgs({ limit: 1000 }) as any
+    orgs.value = res.data?.list || []
+  } catch (e) {
+    ElMessage.error('加载组织列表失败')
   }
 }
 
@@ -174,7 +195,10 @@ function formatTime(time: string) {
   })
 }
 
-onMounted(() => loadLogs())
+onMounted(() => {
+  loadOrgs()
+  loadLogs()
+})
 </script>
 
 <style scoped>

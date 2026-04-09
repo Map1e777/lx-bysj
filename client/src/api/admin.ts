@@ -2,11 +2,11 @@ import request from '@/utils/request'
 
 export const adminApi = {
   // Dashboard stats
-  getStats: () =>
-    request.get('/admin/stats'),
+  getStats: (params?: { org_id?: number }) =>
+    request.get('/admin/stats', { params }),
 
   // User management
-  getUsers: (params?: { page?: number; limit?: number; search?: string; system_role?: string; org_id?: number; is_active?: boolean }) =>
+  getUsers: (params?: { page?: number; limit?: number; search?: string; system_role?: string; org_id?: number; is_active?: boolean; role_code?: string }) =>
     request.get('/admin/users', { params }),
 
   createUser: (data: { username: string; email: string; password: string; system_role?: string; org_id?: number }) =>
@@ -64,9 +64,13 @@ export const adminApi = {
     limit?: number
     action?: string
     actor_id?: number
+    actor?: string
     start_date?: string
     end_date?: string
+    from_date?: string
+    to_date?: string
     resource_type?: string
+    org_id?: number
   }) => request.get('/admin/audit-logs', { params }),
 
   // System config

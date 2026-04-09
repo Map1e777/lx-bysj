@@ -15,6 +15,12 @@
         <el-option label="系统管理员" value="system_admin" />
         <el-option label="普通用户" value="user" />
       </el-select>
+      <el-select v-model="matrixRoleFilter" placeholder="角色矩阵" clearable style="width: 160px" @change="loadUsers">
+        <el-option label="组织管理员" value="org_admin" />
+        <el-option label="文档创作者" value="doc_creator" />
+        <el-option label="文档协作者" value="doc_collaborator" />
+        <el-option label="仅普通用户" value="user" />
+      </el-select>
       <el-select v-model="orgFilter" placeholder="所属组织" clearable style="width: 150px" @change="loadUsers">
         <el-option v-for="org in orgs" :key="org.id" :label="org.name" :value="org.id" />
       </el-select>
@@ -40,6 +46,24 @@
             <el-tag :type="row.system_role === 'system_admin' ? 'danger' : 'info'" size="small">
               {{ row.system_role === 'system_admin' ? '系统管理员' : '普通用户' }}
             </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="角色矩阵" min-width="240">
+          <template #default="{ row }">
+            <div class="role-matrix-cell">
+              <el-tag
+                v-for="badge in row.role_profile?.badges || []"
+                :key="badge.code"
+                :type="badgeType(badge.code)"
+                size="small"
+              >
+                {{ badge.label }}
+              </el-tag>
+            </div>
+            <div class="role-matrix-meta">
+              创作 {{ row.role_profile?.stats?.owned_document_count || 0 }} 篇
+              · 协作 {{ row.role_profile?.stats?.collaborated_document_count || 0 }} 篇
+            </div>
           </template>
         </el-table-column>
         <el-table-column label="所属组织" width="150">
@@ -133,6 +157,7 @@ const currentPage = ref(1)
 const pageSize = ref(20)
 const search = ref('')
 const roleFilter = ref('')
+const matrixRoleFilter = ref('')
 const orgFilter = ref<number | null>(null)
 const showUserDialog = ref(false)
 const editingUser = ref<any>(null)
@@ -172,6 +197,7 @@ async function loadUsers() {
       limit: pageSize.value,
       search: search.value || undefined,
       system_role: roleFilter.value || undefined,
+      role_code: matrixRoleFilter.value || undefined,
       org_id: orgFilter.value || undefined,
     }) as any
     users.value = res.data?.list || []
@@ -186,6 +212,17 @@ async function loadOrgs() {
     const res = await adminApi.getOrgs({ limit: 1000 }) as any
     orgs.value = res.data?.list || []
   } catch (e) {}
+}
+
+function badgeType(code: string) {
+  const map: Record<string, string> = {
+    system_admin: 'danger',
+    org_admin: 'warning',
+    doc_creator: 'success',
+    doc_collaborator: 'primary',
+    user: 'info'
+  }
+  return map[code] || 'info'
 }
 
 function openCreateUser() {
@@ -274,5 +311,7 @@ onMounted(() => {
 .user-name { font-size: 14px; font-weight: 500; color: #303133; }
 .user-email { font-size: 12px; color: #909399; }
 .time-text { font-size: 13px; color: #909399; }
+.role-matrix-cell { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 4px; }
+.role-matrix-meta { font-size: 12px; color: #909399; }
 .pagination-wrapper { display: flex; justify-content: flex-end; margin-top: 16px; }
 </style>

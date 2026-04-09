@@ -4,6 +4,7 @@ const { db } = require('../db')
 const { authenticateToken } = require('../middleware/auth')
 const { requireRole } = require('../middleware/roles')
 const { parsePagination, paginatedResponse } = require('../utils/pagination')
+const { buildRoleProfile } = require('../utils/roleProfile')
 
 // GET /api/users/me
 router.get('/me', authenticateToken, async (req, res) => {
@@ -22,6 +23,7 @@ router.get('/me', authenticateToken, async (req, res) => {
       return res.status(404).json({ code: 404, message: '用户不存在' })
     }
 
+    user.role_profile = await buildRoleProfile(db, user)
     return res.json({ code: 200, message: 'success', data: user })
   } catch (err) {
     console.error('Get current user error:', err)
@@ -64,6 +66,7 @@ router.put('/me', authenticateToken, async (req, res) => {
       [req.user.id]
     )
 
+    updatedUser.role_profile = await buildRoleProfile(db, updatedUser)
     return res.json({ code: 200, message: '更新成功', data: updatedUser })
   } catch (err) {
     console.error('Update user error:', err)

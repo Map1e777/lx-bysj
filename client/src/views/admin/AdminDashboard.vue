@@ -1,8 +1,17 @@
 <template>
   <div class="page-container">
     <div class="page-header">
-      <h2 class="page-title">系统概览</h2>
-      <el-tag type="danger" size="large">系统管理员</el-tag>
+      <div>
+        <h2 class="page-title">系统概览</h2>
+        <div class="page-subtitle">支持按组织切换查看统计、最近用户和审计动态</div>
+      </div>
+      <div class="header-actions">
+        <el-select v-model="selectedOrgId" clearable placeholder="全部组织" style="width: 220px" @change="reloadAll">
+          <el-option label="全部组织" :value="undefined" />
+          <el-option v-for="org in orgs" :key="org.id" :label="org.name" :value="org.id" />
+        </el-select>
+        <el-tag type="danger" size="large">系统管理员</el-tag>
+      </div>
     </div>
 
     <!-- Platform Stats -->
@@ -18,9 +27,53 @@
       </el-col>
     </el-row>
 
+    <el-card shadow="never" class="breakdown-card">
+      <template #header>
+        <div class="card-header">
+          <span>{{ selectedOrgId ? '当前组织细分概览' : '组织维度细分概览' }}</span>
+          <span class="header-tip">{{ selectedOrgId ? '用于查看当前组织明细' : '展示文档量最高的前 10 个组织' }}</span>
+        </div>
+      </template>
+      <div v-if="orgBreakdown.length > 0" class="breakdown-list">
+        <div v-for="org in orgBreakdown" :key="org.id" class="breakdown-item">
+          <div>
+            <div class="breakdown-name">{{ org.name }}</div>
+            <div class="breakdown-meta">成员 {{ org.user_count }} · 文档 {{ org.document_count }} · 版本 {{ org.version_count }}</div>
+          </div>
+          <el-progress
+            :percentage="Math.min(Math.round((Number(org.document_count || 0) / Math.max(maxDocCount, 1)) * 100), 100)"
+            :show-text="false"
+            :stroke-width="8"
+            color="#409eff"
+          />
+        </div>
+      </div>
+      <el-empty v-else :image-size="60" description="暂无组织数据" />
+    </el-card>
+
     <el-row :gutter="20">
+      <el-col :span="8">
+        <el-card shadow="never" class="data-card">
+          <template #header>
+            <div class="card-header">
+              <span>四角色矩阵</span>
+              <span class="header-tip">{{ statsScopeLabel }}</span>
+            </div>
+          </template>
+          <div class="role-grid">
+            <div v-for="item in roleDistribution" :key="item.code" class="role-card">
+              <div class="role-card-top">
+                <el-tag :type="badgeType(item.code)" size="small">{{ item.label }}</el-tag>
+                <span class="role-count">{{ item.value }}</span>
+              </div>
+              <div class="role-desc">{{ item.desc }}</div>
+            </div>
+          </div>
+        </el-card>
+      </el-col>
+
       <!-- Recent Registrations -->
-      <el-col :span="12">
+      <el-col :span="8">
         <el-card shadow="never" class="data-card">
           <template #header>
             <div class="card-header">
@@ -33,12 +86,19 @@
               <el-avatar :size="32">{{ user.username?.charAt(0)?.toUpperCase() }}</el-avatar>
               <div class="item-info">
                 <div class="item-name">{{ user.username }}</div>
-                <div class="item-sub">{{ user.email }}</div>
+                <div class="item-sub">{{ user.email }} · {{ user.org_name || '独立用户' }}</div>
               </div>
               <div class="item-right">
-                <el-tag :type="user.system_role === 'system_admin' ? 'danger' : 'info'" size="small">
-                  {{ user.system_role === 'system_admin' ? '系统管理员' : '普通用户' }}
-                </el-tag>
+                <div class="user-role-tags">
+                  <el-tag
+                    v-for="badge in user.role_profile?.badges || []"
+                    :key="badge.code"
+                    :type="badgeType(badge.code)"
+                    size="small"
+                  >
+                    {{ badge.label }}
+                  </el-tag>
+                </div>
                 <div class="item-time">{{ formatTime(user.created_at) }}</div>
               </div>
             </div>
@@ -48,7 +108,7 @@
       </el-col>
 
       <!-- Recent Audit Events -->
-      <el-col :span="12">
+      <el-col :span="8">
         <el-card shadow="never" class="data-card">
           <template #header>
             <div class="card-header">
@@ -63,7 +123,11 @@
               </div>
               <div class="item-info">
                 <div class="item-name">{{ log.actor_username || log.actor_id || '-' }}</div>
-                <div class="item-sub">{{ actionLabel(log.action) }} · {{ log.resource_type }}</div>
+                <div class="item-sub">
+                  {{ actionLabel(log.action) }} · {{ log.resource_type }}
+                  <span v-if="log.org_name"> · {{ log.org_name }}</span>
+                  <span v-if="log.document_title"> · {{ log.document_title }}</span>
+                </div>
               </div>
               <div class="item-right">
                 <div class="item-time">{{ formatTime(log.created_at) }}</div>
@@ -78,7 +142,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { adminApi } from '@/api/admin'
 
@@ -87,6 +151,16 @@ const usersLoading = ref(false)
 const auditLoading = ref(false)
 const recentUsers = ref<any[]>([])
 const recentAuditLogs = ref<any[]>([])
+const orgs = ref<any[]>([])
+const selectedOrgId = ref<number | undefined>(undefined)
+const orgBreakdown = ref<any[]>([])
+const roleDistribution = ref([
+  { code: 'system_admin', label: '系统管理员', value: 0, desc: '平台级配置与最高权限' },
+  { code: 'org_admin', label: '组织管理员', value: 0, desc: '组织用户、部门与文档治理' },
+  { code: 'doc_creator', label: '文档创作者', value: 0, desc: '拥有文档创建与核心管理权限' },
+  { code: 'doc_collaborator', label: '文档协作者', value: 0, desc: '按授权参与协作与版本查看' },
+  { code: 'user', label: '普通用户', value: 0, desc: '尚未拥有上述管理或协作身份' },
+])
 
 const statsCards = ref([
   { label: '总用户数', value: 0, icon: 'UserFilled', color: '#409eff' },
@@ -96,10 +170,12 @@ const statsCards = ref([
   { label: '存储使用', value: '0 MB', icon: 'Files', color: '#7b2ff7' },
   { label: '今日活跃', value: 0, icon: 'TrendCharts', color: '#00d2ff' },
 ])
+const statsScopeLabel = computed(() => selectedOrgId.value ? '当前组织视角' : '全平台视角')
+const maxDocCount = computed(() => Math.max(...orgBreakdown.value.map(item => Number(item.document_count || 0)), 0))
 
 async function loadStats() {
   try {
-    const res = await adminApi.getStats() as any
+    const res = await adminApi.getStats({ org_id: selectedOrgId.value }) as any
     const stats = res.data || {}
     statsCards.value[0].value = stats.total_users ?? stats.users?.total ?? 0
     statsCards.value[1].value = stats.total_orgs ?? stats.organizations?.total ?? 0
@@ -107,13 +183,19 @@ async function loadStats() {
     statsCards.value[3].value = stats.total_versions ?? stats.versions?.total ?? 0
     statsCards.value[4].value = stats.storage_used || '0 MB'
     statsCards.value[5].value = stats.active_today || 0
+    orgBreakdown.value = stats.org_breakdown || []
+    const distribution = stats.role_distribution || {}
+    roleDistribution.value = roleDistribution.value.map(item => ({
+      ...item,
+      value: distribution[item.code] || 0
+    }))
   } catch (e) {}
 }
 
 async function loadRecentUsers() {
   usersLoading.value = true
   try {
-    const res = await adminApi.getUsers({ limit: 8, sort: 'created_at' } as any) as any
+    const res = await adminApi.getUsers({ limit: 8, org_id: selectedOrgId.value } as any) as any
     recentUsers.value = res.data?.list || []
   } catch (e) {} finally {
     usersLoading.value = false
@@ -123,11 +205,35 @@ async function loadRecentUsers() {
 async function loadRecentAuditLogs() {
   auditLoading.value = true
   try {
-    const res = await adminApi.getAuditLogs({ limit: 8 }) as any
+    const res = await adminApi.getAuditLogs({ limit: 8, org_id: selectedOrgId.value }) as any
     recentAuditLogs.value = res.data?.list || []
   } catch (e) {} finally {
     auditLoading.value = false
   }
+}
+
+async function loadOrgs() {
+  try {
+    const res = await adminApi.getOrgs({ limit: 1000 }) as any
+    orgs.value = res.data?.list || []
+  } catch (e) {}
+}
+
+function reloadAll() {
+  loadStats()
+  loadRecentUsers()
+  loadRecentAuditLogs()
+}
+
+function badgeType(code: string) {
+  const map: Record<string, string> = {
+    system_admin: 'danger',
+    org_admin: 'warning',
+    doc_creator: 'success',
+    doc_collaborator: 'primary',
+    user: 'info'
+  }
+  return map[code] || 'info'
 }
 
 function actionLabel(action: string) {
@@ -171,14 +277,16 @@ function formatTime(time: string) {
 }
 
 onMounted(() => {
-  loadStats()
-  loadRecentUsers()
-  loadRecentAuditLogs()
+  loadOrgs()
+  reloadAll()
 })
 </script>
 
 <style scoped>
+.page-subtitle { font-size: 13px; color: #909399; margin-top: 6px; }
+.header-actions { display: flex; align-items: center; gap: 12px; }
 .stats-row { margin-bottom: 20px; }
+.breakdown-card { border-radius: 12px; margin-bottom: 20px; }
 
 .stat-card {
   background: #fff;
@@ -208,6 +316,26 @@ onMounted(() => {
 .data-card { border-radius: 12px; }
 
 .card-header { display: flex; align-items: center; justify-content: space-between; }
+.header-tip { font-size: 12px; color: #909399; }
+.role-grid { display: grid; gap: 10px; }
+.role-card {
+  border: 1px solid #eef2f6;
+  border-radius: 10px;
+  padding: 12px;
+  background: #fbfcfe;
+}
+.role-card-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.role-count { font-size: 18px; font-weight: 700; color: #303133; }
+.role-desc { font-size: 12px; color: #909399; line-height: 1.6; }
+.breakdown-list { display: grid; gap: 12px; }
+.breakdown-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 180px;
+  gap: 16px;
+  align-items: center;
+}
+.breakdown-name { font-size: 14px; font-weight: 600; color: #303133; margin-bottom: 4px; }
+.breakdown-meta { font-size: 12px; color: #909399; }
 
 .list-item {
   display: flex;
@@ -225,6 +353,7 @@ onMounted(() => {
 
 .item-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
 .item-time { font-size: 11px; color: #c0c4cc; }
+.user-role-tags { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; max-width: 180px; }
 
 .audit-action-icon {
   width: 32px;
