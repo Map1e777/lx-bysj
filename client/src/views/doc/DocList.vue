@@ -79,8 +79,8 @@
           <el-table-column label="所有者" width="130">
             <template #default="{ row }">
               <div class="owner-cell">
-                <el-avatar :size="24">{{ row.owner?.username?.charAt(0) }}</el-avatar>
-                <span>{{ row.owner?.username }}</span>
+                <el-avatar :size="24">{{ row.owner_username?.charAt(0) }}</el-avatar>
+                <span>{{ row.owner_username }}</span>
               </div>
             </template>
           </el-table-column>

@@ -110,7 +110,10 @@ async function loadTemplates() {
   loading.value = true
   try {
     const res = await adminApi.getPermTemplates() as any
-    templates.value = res.data || []
+    templates.value = (res.data?.list || []).map((tmpl: any) => ({
+      ...tmpl,
+      permissions: typeof tmpl.rules === 'object' && !Array.isArray(tmpl.rules) ? tmpl.rules : {}
+    }))
   } catch (e) {} finally {
     loading.value = false
   }

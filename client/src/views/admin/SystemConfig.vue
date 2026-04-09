@@ -110,9 +110,9 @@ async function loadConfig() {
     const config = res.data || {}
     Object.assign(form, {
       platform_name: config.platform_name || '文档协作系统',
-      registration_open: config.registration_open ?? true,
-      max_upload_size: config.max_upload_size ?? 10,
-      maintenance_mode: config.maintenance_mode ?? false,
+      registration_open: config.registration_open ?? config.allow_registration ?? true,
+      max_upload_size: Number(config.max_upload_size ?? 10),
+      maintenance_mode: Boolean(config.maintenance_mode ?? false),
     })
   } catch (e) {} finally {
     loading.value = false

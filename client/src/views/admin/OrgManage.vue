@@ -30,8 +30,8 @@
         <el-table-column label="负责人" width="150">
           <template #default="{ row }">
             <div class="owner-cell">
-              <el-avatar :size="24">{{ row.owner?.username?.charAt(0) }}</el-avatar>
-              <span>{{ row.owner?.username || '-' }}</span>
+              <el-avatar :size="24">{{ row.owner_username?.charAt(0) }}</el-avatar>
+              <span>{{ row.owner_username || '-' }}</span>
             </div>
           </template>
         </el-table-column>
@@ -42,7 +42,7 @@
         </el-table-column>
         <el-table-column label="文档数" width="90">
           <template #default="{ row }">
-            <span>{{ row.document_count || 0 }}</span>
+            <span>{{ row.doc_count || 0 }}</span>
           </template>
         </el-table-column>
         <el-table-column label="创建时间" width="130">
@@ -86,9 +86,9 @@
       <div v-if="orgDetail" v-loading="detailLoading">
         <el-descriptions :column="2" border>
           <el-descriptions-item label="组织名称">{{ orgDetail.name }}</el-descriptions-item>
-          <el-descriptions-item label="负责人">{{ orgDetail.owner?.username }}</el-descriptions-item>
+          <el-descriptions-item label="负责人">{{ orgDetail.owner_username || '-' }}</el-descriptions-item>
           <el-descriptions-item label="成员数">{{ orgDetail.member_count }}</el-descriptions-item>
-          <el-descriptions-item label="文档数">{{ orgDetail.document_count }}</el-descriptions-item>
+          <el-descriptions-item label="文档数">{{ orgDetail.doc_count }}</el-descriptions-item>
           <el-descriptions-item label="创建时间">{{ formatDate(orgDetail.created_at) }}</el-descriptions-item>
           <el-descriptions-item label="描述">{{ orgDetail.description || '无' }}</el-descriptions-item>
         </el-descriptions>

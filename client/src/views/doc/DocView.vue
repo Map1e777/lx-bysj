@@ -31,7 +31,7 @@
         <div class="doc-meta">
           <div class="meta-item">
             <el-icon><User /></el-icon>
-            <span>{{ document?.owner?.username }}</span>
+            <span>{{ document?.owner_username || '-' }}</span>
           </div>
           <div class="meta-item">
             <el-icon><Clock /></el-icon>
@@ -69,10 +69,10 @@
         </div>
         <div class="comments-list">
           <div v-for="comment in comments" :key="comment.id" class="comment-item">
-            <el-avatar :size="32">{{ comment.user?.username?.charAt(0) }}</el-avatar>
+            <el-avatar :size="32">{{ comment.author_username?.charAt(0) }}</el-avatar>
             <div class="comment-body">
               <div class="comment-header">
-                <span class="comment-author">{{ comment.user?.username }}</span>
+                <span class="comment-author">{{ comment.author_username }}</span>
                 <span class="comment-time">{{ formatTime(comment.created_at) }}</span>
               </div>
               <div class="comment-text">{{ comment.content }}</div>
@@ -91,7 +91,6 @@ import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { documentApi } from '@/api/document'
 import { commentApi } from '@/api/comment'
-import { collaborationApi } from '@/api/collaboration'
 
 const router = useRouter()
 const route = useRoute()
@@ -117,7 +116,7 @@ function statusLabel(status: string) {
 }
 
 function roleLabel(role: string) {
-  const map: Record<string, string> = { owner: '所有者', editor: '编辑者', commenter: '评论者', viewer: '查看者' }
+  const map: Record<string, string> = { creator: '创建者', editor: '编辑者', commenter: '评论者', viewer: '查看者' }
   return map[role] || role
 }
 
@@ -131,6 +130,7 @@ async function loadDocument() {
   try {
     const res = await documentApi.getDocument(docId) as any
     document.value = res.data
+    userRole.value = res.data?.my_role || ''
   } catch (e) {
     ElMessage.error('加载文档失败')
     router.push('/documents')
@@ -142,17 +142,7 @@ async function loadDocument() {
 async function loadComments() {
   try {
     const res = await commentApi.getComments(docId) as any
-    comments.value = res.data?.list || []
-  } catch (e) {}
-}
-
-async function loadCollaborators() {
-  try {
-    const res = await collaborationApi.getCollaborators(docId) as any
-    const collabs = res.data || []
-    // Find current user's role
-    const myCollab = collabs.find((c: any) => c.is_me)
-    if (myCollab) userRole.value = myCollab.role
+    comments.value = res.data || []
   } catch (e) {}
 }
 
@@ -189,7 +179,6 @@ async function exportDoc() {
 
 onMounted(() => {
   loadDocument()
-  loadCollaborators()
 })
 </script>
 

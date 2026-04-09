@@ -102,7 +102,9 @@ async function loadRules() {
   loading.value = true
   try {
     const res = await adminApi.getVersionRules() as any
-    const rules = res.data || {}
+    const rules = Array.isArray(res.data)
+      ? (res.data.find((item: any) => item.scope === 'global' && !item.org_id) || res.data[0] || {})
+      : (res.data || {})
     Object.assign(form, {
       auto_save_interval: rules.auto_save_interval ?? 30,
       max_versions_per_doc: rules.max_versions_per_doc ?? 100,

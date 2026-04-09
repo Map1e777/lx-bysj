@@ -30,14 +30,14 @@
         <el-table-column label="创建者" width="130">
           <template #default="{ row }">
             <div class="owner-cell">
-              <el-avatar :size="24">{{ row.owner?.username?.charAt(0) }}</el-avatar>
-              <span>{{ row.owner?.username }}</span>
+              <el-avatar :size="24">{{ row.owner_username?.charAt(0) }}</el-avatar>
+              <span>{{ row.owner_username }}</span>
             </div>
           </template>
         </el-table-column>
         <el-table-column label="部门" width="120">
           <template #default="{ row }">
-            {{ row.department?.name || '-' }}
+            {{ row.dept_name || '-' }}
           </template>
         </el-table-column>
         <el-table-column label="状态" width="100">
@@ -120,6 +120,7 @@ async function loadDocs() {
       limit: pageSize.value,
       status: statusFilter.value || undefined,
       dept_id: deptFilter.value || undefined,
+      search: search.value || undefined,
     }) as any
     documents.value = res.data?.list || []
     total.value = res.data?.total || 0

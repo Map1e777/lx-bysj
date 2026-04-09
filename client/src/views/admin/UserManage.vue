@@ -44,7 +44,7 @@
         </el-table-column>
         <el-table-column label="所属组织" width="150">
           <template #default="{ row }">
-            <span>{{ row.org?.name || '无' }}</span>
+            <span>{{ row.org_name || '无' }}</span>
           </template>
         </el-table-column>
         <el-table-column label="状态" width="90">
@@ -171,7 +171,7 @@ async function loadUsers() {
       page: currentPage.value,
       limit: pageSize.value,
       search: search.value || undefined,
-      role: roleFilter.value || undefined,
+      system_role: roleFilter.value || undefined,
       org_id: orgFilter.value || undefined,
     }) as any
     users.value = res.data?.list || []

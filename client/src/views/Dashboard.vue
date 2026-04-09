@@ -127,7 +127,7 @@
                 </div>
                 <div class="invite-info">
                   <div class="invite-title">{{ inv.document_title }}</div>
-                  <div class="invite-meta">{{ inv.inviter_name }} 邀请您协作</div>
+                  <div class="invite-meta">{{ inv.inviter_name || inv.inviter_username }} 邀请您协作</div>
                 </div>
                 <div class="invite-actions">
                   <el-button size="small" type="success" @click.stop="acceptInvitation(inv.id)">接受</el-button>
@@ -182,7 +182,7 @@ const today = computed(() => {
 const roleLabel = computed(() => {
   if (authStore.isSystemAdmin) return '系统管理员'
   if (authStore.isOrgAdmin) return '组织管理员'
-  return '普通用户'
+  return '文档用户'
 })
 
 const roleTagType = computed(() => {
@@ -310,7 +310,9 @@ async function loadOrgStats() {
 
 async function acceptInvitation(id: number) {
   try {
-    await collaborationApi.acceptInvitation(id)
+    const invitation = pendingInvitations.value.find(item => item.id === id)
+    if (!invitation?.token) throw new Error('邀请信息不完整')
+    await collaborationApi.acceptInvitation(invitation.token)
     ElMessage.success('已接受邀请')
     await loadPendingInvitations()
   } catch (e) {

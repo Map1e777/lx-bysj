@@ -50,8 +50,8 @@
         <el-table-column label="操作人" width="130">
           <template #default="{ row }">
             <div class="user-cell">
-              <el-avatar :size="24">{{ row.user?.username?.charAt(0) }}</el-avatar>
-              <span>{{ row.user?.username }}</span>
+              <el-avatar :size="24">{{ row.actor_username?.charAt(0) }}</el-avatar>
+              <span>{{ row.actor_username || '-' }}</span>
             </div>
           </template>
         </el-table-column>
@@ -64,8 +64,8 @@
         </el-table-column>
         <el-table-column label="文档" min-width="200">
           <template #default="{ row }">
-            <span class="doc-link" @click="router.push(`/documents/${row.document_id}/view`)">
-              {{ row.document_title }}
+            <span class="doc-link" @click="row.document_id && router.push(`/documents/${row.document_id}/view`)">
+              {{ row.document_title || row.resource_id || '-' }}
             </span>
           </template>
         </el-table-column>
@@ -126,6 +126,8 @@ async function loadAudit() {
     const params: any = {
       page: currentPage.value,
       limit: pageSize.value,
+      doc_title: filters.doc_title || undefined,
+      user_name: filters.user_name || undefined,
     }
     if (dateRange.value?.length === 2) {
       params.start_date = dateRange.value[0].toISOString().split('T')[0]
@@ -150,15 +152,18 @@ function resetFilters() {
 async function exportReport() {
   try {
     const params: any = {}
+    if (filters.doc_title) params.doc_title = filters.doc_title
+    if (filters.user_name) params.user_name = filters.user_name
     if (dateRange.value?.length === 2) {
       params.start_date = dateRange.value[0].toISOString().split('T')[0]
       params.end_date = dateRange.value[1].toISOString().split('T')[0]
     }
-    const blob = await orgApi.exportAuditReport(params) as any
+    const response = await orgApi.exportAuditReport(params) as any
+    const blob = response instanceof Blob ? response : new Blob([response], { type: 'text/csv;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `版本审计报告_${new Date().toLocaleDateString('zh-CN').replace(/\//g, '-')}.xlsx`
+    a.download = `版本审计报告_${new Date().toLocaleDateString('zh-CN').replace(/\//g, '-')}.csv`
     a.click()
     URL.revokeObjectURL(url)
     ElMessage.success('导出成功')

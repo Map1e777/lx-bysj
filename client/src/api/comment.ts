@@ -19,5 +19,5 @@ export const commentApi = {
 
   // Resolve comment
   resolveComment: (docId: number, commentId: number) =>
-    request.post(`/documents/${docId}/comments/${commentId}/resolve`),
+    request.put(`/documents/${docId}/comments/${commentId}/resolve`),
 }

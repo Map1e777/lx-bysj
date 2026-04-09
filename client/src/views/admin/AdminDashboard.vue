@@ -62,7 +62,7 @@
                 <el-icon><component :is="getActionIcon(log.action)" /></el-icon>
               </div>
               <div class="item-info">
-                <div class="item-name">{{ log.actor?.username }}</div>
+                <div class="item-name">{{ log.actor_username || log.actor_id || '-' }}</div>
                 <div class="item-sub">{{ actionLabel(log.action) }} · {{ log.resource_type }}</div>
               </div>
               <div class="item-right">
@@ -101,10 +101,10 @@ async function loadStats() {
   try {
     const res = await adminApi.getStats() as any
     const stats = res.data || {}
-    statsCards.value[0].value = stats.total_users || 0
-    statsCards.value[1].value = stats.total_orgs || 0
-    statsCards.value[2].value = stats.total_documents || 0
-    statsCards.value[3].value = stats.total_versions || 0
+    statsCards.value[0].value = stats.total_users ?? stats.users?.total ?? 0
+    statsCards.value[1].value = stats.total_orgs ?? stats.organizations?.total ?? 0
+    statsCards.value[2].value = stats.total_documents ?? stats.documents?.total ?? 0
+    statsCards.value[3].value = stats.total_versions ?? stats.versions?.total ?? 0
     statsCards.value[4].value = stats.storage_used || '0 MB'
     statsCards.value[5].value = stats.active_today || 0
   } catch (e) {}

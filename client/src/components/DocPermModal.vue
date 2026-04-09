@@ -113,6 +113,7 @@ import { documentApi } from '@/api/document'
 
 interface Collaborator {
   id: number
+  user_id: number
   username: string
   email: string
   role: string
@@ -185,7 +186,7 @@ async function handleInvite() {
 
 async function handleRoleChange(collab: Collaborator) {
   try {
-    await collaborationApi.updateCollaboratorRole(props.docId, collab.id, { role: collab.role })
+    await collaborationApi.updateCollaboratorRole(props.docId, collab.user_id, { role: collab.role })
     ElMessage.success('角色已更新')
   } catch (e) {
     ElMessage.error('更新失败')
@@ -198,7 +199,7 @@ async function handleRemove(collab: Collaborator) {
     await ElMessageBox.confirm(`确定要移除协作者 ${collab.username} 吗？`, '提示', {
       type: 'warning'
     })
-    await collaborationApi.removeCollaborator(props.docId, collab.id)
+    await collaborationApi.removeCollaborator(props.docId, collab.user_id)
     ElMessage.success('已移除协作者')
     loadCollaborators()
   } catch (e: any) {
@@ -210,10 +211,9 @@ async function handleGenerateLink() {
   try {
     generatingLink.value = true
     const res = await documentApi.createShareLink(props.docId, {
-      expires_in: shareLinkExpiry.value,
-      permission: shareLinkPerm.value
+      expires_in_days: shareLinkExpiry.value || undefined
     }) as any
-    const token = res.data.token
+    const token = res.data.share_token
     shareLink.value = `${window.location.origin}/share/${token}`
     ElMessage.success('分享链接已生成')
   } catch (e) {

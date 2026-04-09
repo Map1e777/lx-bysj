@@ -504,7 +504,7 @@ async function loadComments() {
   if (!docId.value) return
   try {
     const res = await commentApi.getComments(docId.value) as any
-    comments.value = res.data?.list || []
+    comments.value = res.data || []
   } catch (e) {}
 }
 

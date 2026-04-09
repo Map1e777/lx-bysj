@@ -55,8 +55,8 @@
         <el-table-column label="操作人" width="130">
           <template #default="{ row }">
             <div class="actor-cell">
-              <el-avatar :size="22">{{ row.actor?.username?.charAt(0) }}</el-avatar>
-              <span>{{ row.actor?.username || row.actor_id }}</span>
+              <el-avatar :size="22">{{ row.actor_username?.charAt(0) }}</el-avatar>
+              <span>{{ row.actor_username || row.actor_id }}</span>
             </div>
           </template>
         </el-table-column>
@@ -84,7 +84,7 @@
         </el-table-column>
         <el-table-column label="详情" min-width="200">
           <template #default="{ row }">
-            <span class="detail-text">{{ row.details || '-' }}</span>
+            <span class="detail-text">{{ row.new_value || row.old_value || '-' }}</span>
           </template>
         </el-table-column>
       </el-table>
@@ -123,12 +123,13 @@ async function loadLogs() {
     const params: any = {
       page: currentPage.value,
       limit: pageSize.value,
+      actor: filters.actor || undefined,
       action: filters.action || undefined,
       resource_type: filters.resource_type || undefined,
     }
     if (dateRange.value?.length === 2) {
-      params.start_date = dateRange.value[0].toISOString().split('T')[0]
-      params.end_date = dateRange.value[1].toISOString().split('T')[0]
+      params.from_date = dateRange.value[0].toISOString().split('T')[0]
+      params.to_date = dateRange.value[1].toISOString().split('T')[0]
     }
     const res = await adminApi.getAuditLogs(params) as any
     logs.value = res.data?.list || []

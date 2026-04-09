@@ -12,7 +12,7 @@ const { parsePagination, paginatedResponse } = require('../utils/pagination')
 router.get('/', authenticateToken, async (req, res) => {
   try {
     const { page, limit, offset } = parsePagination(req.query)
-    const { status, visibility, search, scope } = req.query
+    const { status, visibility, search, scope, role } = req.query
     const userId = req.user.id
 
     const conditions = ['d.deleted_at IS NULL']
@@ -24,6 +24,12 @@ router.get('/', authenticateToken, async (req, res) => {
     } else if (scope === 'shared') {
       conditions.push('(dp.user_id = ? AND d.owner_id != ?)')
       params.push(userId, userId)
+      if (role) {
+        conditions.push('dp.role = ?')
+        params.push(role)
+      }
+    } else if (scope === 'public') {
+      conditions.push("d.visibility = 'public'")
     } else if (scope === 'org') {
       conditions.push("d.org_id = ? AND d.visibility IN ('org', 'public')")
       params.push(req.user.org_id)
@@ -293,7 +299,7 @@ router.post('/:id/share', authenticateToken, requireDocPermission('manage'), asy
     if (expires_in_days && parseInt(expires_in_days) > 0) {
       const expDate = new Date()
       expDate.setDate(expDate.getDate() + parseInt(expires_in_days))
-      expiresAt = expDate.toISOString()
+      expiresAt = expDate
     }
 
     await db.run(

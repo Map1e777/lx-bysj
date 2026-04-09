@@ -5,6 +5,7 @@ const { db } = require('../db')
 const { authenticateToken } = require('../middleware/auth')
 const { requireDocPermission } = require('../middleware/permissions')
 const { createNotification } = require('../services/notificationService')
+const { parsePagination, paginatedResponse } = require('../utils/pagination')
 
 // ===== Collaborator endpoints (mounted on /api/documents) =====
 
@@ -22,7 +23,14 @@ router.get('/:id/collaborators', authenticateToken, requireDocPermission('read')
       ORDER BY dp.granted_at ASC
     `, [req.params.id])
 
-    return res.json({ code: 200, message: 'success', data: collaborators })
+    return res.json({
+      code: 200,
+      message: 'success',
+      data: collaborators.map(collab => ({
+        ...collab,
+        is_owner: collab.role === 'creator'
+      }))
+    })
   } catch (err) {
     console.error('List collaborators error:', err)
     return res.status(500).json({ code: 500, message: '服务器错误' })
@@ -39,9 +47,9 @@ router.post('/:id/collaborators/invite', authenticateToken, requireDocPermission
       return res.status(400).json({ code: 400, message: '邮箱不能为空' })
     }
 
-    const validRoles = ['editor', 'viewer']
+    const validRoles = ['editor', 'commenter', 'viewer']
     if (!validRoles.includes(role)) {
-      return res.status(400).json({ code: 400, message: '无效的角色，可选值: editor, viewer' })
+        return res.status(400).json({ code: 400, message: '无效的角色，可选值: editor, commenter, viewer' })
     }
 
     const doc = req.document || await db.get('SELECT * FROM documents WHERE id = ?', [docId])
@@ -63,21 +71,14 @@ router.post('/:id/collaborators/invite', authenticateToken, requireDocPermission
     }
 
     const token = uuidv4()
-    let expiresAt = null
-    if (expires_in_days && parseInt(expires_in_days) > 0) {
-      const exp = new Date()
-      exp.setDate(exp.getDate() + parseInt(expires_in_days))
-      expiresAt = exp.toISOString()
-    } else {
-      const exp = new Date()
-      exp.setDate(exp.getDate() + 7)
-      expiresAt = exp.toISOString()
-    }
+    const exp = new Date()
+    exp.setDate(exp.getDate() + (expires_in_days && parseInt(expires_in_days) > 0 ? parseInt(expires_in_days) : 7))
 
     const result = await db.run(
       "INSERT INTO invitations (document_id, inviter_id, invitee_email, invitee_id, role, token, status, expires_at) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)",
-      [docId, req.user.id, email, invitee?.id || null, role, token, expiresAt]
+      [docId, req.user.id, email, invitee?.id || null, role, token, exp]
     )
+    const expiresAt = exp.toISOString()
 
     if (invitee) {
       await createNotification(invitee.id, 'invitation.received', {
@@ -137,9 +138,9 @@ router.put('/:id/collaborators/:userId', authenticateToken, requireDocPermission
     const docId = req.params.id
     const targetUserId = req.params.userId
 
-    const validRoles = ['editor', 'viewer']
+    const validRoles = ['editor', 'commenter', 'viewer']
     if (!role || !validRoles.includes(role)) {
-      return res.status(400).json({ code: 400, message: '无效的角色，可选值: editor, viewer' })
+      return res.status(400).json({ code: 400, message: '无效的角色，可选值: editor, commenter, viewer' })
     }
 
     const perm = await db.get('SELECT * FROM document_permissions WHERE document_id = ? AND user_id = ?', [docId, targetUserId])
@@ -172,20 +173,32 @@ router.put('/:id/collaborators/:userId', authenticateToken, requireDocPermission
 // GET /api/invitations
 router.get('/', authenticateToken, async (req, res) => {
   try {
+    const { page, limit, offset } = parsePagination(req.query)
     const { status = 'pending' } = req.query
+
+    const countRow = await db.get(`
+      SELECT COUNT(*) as count
+      FROM invitations i
+      WHERE (i.invitee_email = ? OR i.invitee_id = ?) AND i.status = ?
+    `, [req.user.email, req.user.id, status])
 
     const invitations = await db.all(`
       SELECT i.id, i.document_id, i.role, i.token, i.status, i.created_at, i.expires_at, i.responded_at,
              d.title as document_title,
-             u.username as inviter_username, u.avatar_url as inviter_avatar
+             u.username as inviter_username, u.username as inviter_name, u.avatar_url as inviter_avatar
       FROM invitations i
       LEFT JOIN documents d ON i.document_id = d.id
       LEFT JOIN users u ON i.inviter_id = u.id
       WHERE (i.invitee_email = ? OR i.invitee_id = ?) AND i.status = ?
       ORDER BY i.created_at DESC
-    `, [req.user.email, req.user.id, status])
+      LIMIT ? OFFSET ?
+    `, [req.user.email, req.user.id, status, limit, offset])
 
-    return res.json({ code: 200, message: 'success', data: invitations })
+    return res.json({
+      code: 200,
+      message: 'success',
+      data: paginatedResponse(invitations, countRow.count, page, limit)
+    })
   } catch (err) {
     console.error('List invitations error:', err)
     return res.status(500).json({ code: 500, message: '服务器错误' })

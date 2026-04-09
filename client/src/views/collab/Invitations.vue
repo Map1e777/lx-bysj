@@ -119,7 +119,7 @@ async function handleAccept(inv: any) {
   processingId.value = inv.id
   processingAction.value = 'accept'
   try {
-    await collaborationApi.acceptInvitation(inv.id)
+    await collaborationApi.acceptInvitation(inv.token)
     ElMessage.success('已接受邀请，现在可以访问该文档')
     loadInvitations()
   } catch (e) {
@@ -134,7 +134,7 @@ async function handleDecline(inv: any) {
   processingId.value = inv.id
   processingAction.value = 'decline'
   try {
-    await collaborationApi.declineInvitation(inv.id)
+    await collaborationApi.declineInvitation(inv.token)
     ElMessage.success('已拒绝邀请')
     loadInvitations()
   } catch (e) {

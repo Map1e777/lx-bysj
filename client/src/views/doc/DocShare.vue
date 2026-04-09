@@ -14,7 +14,7 @@
           <div class="share-info">
             <span>
               <el-icon><User /></el-icon>
-              {{ document.owner?.username }}
+              {{ document.owner_username || '-' }}
             </span>
             <span>
               <el-icon><Clock /></el-icon>

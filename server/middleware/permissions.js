@@ -64,6 +64,7 @@ function checkPermission(role, action) {
   const matrix = {
     creator: ['read', 'write', 'manage', 'delete', 'version_manage', 'version_save', 'comment', 'export'],
     editor:  ['read', 'write', 'comment', 'version_save', 'export'],
+    commenter: ['read', 'comment', 'export'],
     viewer:  ['read', 'comment', 'export']
   }
   return matrix[role]?.includes(action) ?? false

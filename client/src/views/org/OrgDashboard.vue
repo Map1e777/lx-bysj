@@ -117,9 +117,9 @@ async function loadStats() {
   try {
     const res = await orgApi.getOrgStats() as any
     const stats = res.data || {}
-    statsCards.value[0].value = stats.member_count || 0
-    statsCards.value[1].value = stats.dept_count || 0
-    statsCards.value[2].value = stats.document_count || 0
+    statsCards.value[0].value = stats.member_count ?? stats.stats?.member_count ?? 0
+    statsCards.value[1].value = stats.dept_count ?? stats.department_count ?? stats.stats?.department_count ?? 0
+    statsCards.value[2].value = stats.document_count ?? stats.stats?.document_count ?? 0
     statsCards.value[3].value = stats.new_docs_this_month || 0
   } catch (e) {}
 }
@@ -128,7 +128,11 @@ async function loadActivities() {
   activityLoading.value = true
   try {
     const res = await orgApi.getVersionAudit({ limit: 10 }) as any
-    activities.value = res.data?.list || []
+    activities.value = (res.data?.list || []).map((item: any) => ({
+      ...item,
+      user: { username: item.actor_username || '-' },
+      resource_title: item.document_title || item.resource_id || '-'
+    }))
   } catch (e) {} finally {
     activityLoading.value = false
   }

@@ -206,7 +206,7 @@ router.put('/:id/comments/:cid/resolve', authenticateToken, requireDocPermission
 
     const newResolved = comment.is_resolved ? 0 : 1
     const resolvedBy = newResolved ? req.user.id : null
-    const resolvedAt = newResolved ? new Date().toISOString() : null
+    const resolvedAt = newResolved ? new Date() : null
 
     await db.run(
       'UPDATE comments SET is_resolved = ?, resolved_by = ?, resolved_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',

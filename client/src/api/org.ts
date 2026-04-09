@@ -10,7 +10,7 @@ export const orgApi = {
     request.get('/org/stats'),
 
   // Get org members
-  getMembers: (params?: { page?: number; limit?: number; search?: string; dept_id?: number }) =>
+  getMembers: (params?: { page?: number; limit?: number; search?: string; dept_id?: number; org_role?: string }) =>
     request.get('/org/members', { params }),
 
   // Add member to org
@@ -42,7 +42,7 @@ export const orgApi = {
     request.delete(`/org/departments/${deptId}`),
 
   // Get org documents
-  getOrgDocuments: (params?: { page?: number; limit?: number; status?: string; dept_id?: number; creator_id?: number }) =>
+  getOrgDocuments: (params?: { page?: number; limit?: number; status?: string; dept_id?: number; creator_id?: number; search?: string }) =>
     request.get('/org/documents', { params }),
 
   // Force archive document

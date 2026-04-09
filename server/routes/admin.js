@@ -213,6 +213,37 @@ router.get('/orgs', async (req, res) => {
   }
 })
 
+// GET /api/admin/orgs/:id
+router.get('/orgs/:id', async (req, res) => {
+  try {
+    const org = await db.get(`
+      SELECT o.id, o.name, o.slug, o.description, o.logo_url, o.owner_id, o.settings, o.created_at, o.updated_at,
+             u.username as owner_username,
+             (SELECT COUNT(*) FROM users WHERE org_id = o.id) as member_count,
+             (SELECT COUNT(*) FROM documents WHERE org_id = o.id AND deleted_at IS NULL) as doc_count
+      FROM orgs o
+      LEFT JOIN users u ON o.owner_id = u.id
+      WHERE o.id = ?
+    `, [req.params.id])
+
+    if (!org) {
+      return res.status(404).json({ code: 404, message: '组织不存在' })
+    }
+
+    return res.json({
+      code: 200,
+      message: 'success',
+      data: {
+        ...org,
+        settings: (() => { try { return JSON.parse(org.settings || '{}') } catch { return {} } })()
+      }
+    })
+  } catch (err) {
+    console.error('Admin get org detail error:', err)
+    return res.status(500).json({ code: 500, message: '服务器错误' })
+  }
+})
+
 // POST /api/admin/orgs
 router.post('/orgs', async (req, res) => {
   try {
@@ -325,7 +356,8 @@ router.get('/permission-templates', async (req, res) => {
 // POST /api/admin/permission-templates
 router.post('/permission-templates', async (req, res) => {
   try {
-    const { name, description, scope = 'global', org_id, rules = [] } = req.body
+    const { name, description, scope = 'global', org_id, rules, permissions } = req.body
+    const normalizedRules = rules ?? permissions ?? {}
 
     if (!name) {
       return res.status(400).json({ code: 400, message: '模板名称不能为空' })
@@ -333,7 +365,7 @@ router.post('/permission-templates', async (req, res) => {
 
     const result = await db.run(
       'INSERT INTO permission_templates (name, description, scope, org_id, rules, created_by) VALUES (?, ?, ?, ?, ?, ?)',
-      [name, description || null, scope, org_id || null, JSON.stringify(rules), req.user.id]
+      [name, description || null, scope, org_id || null, JSON.stringify(normalizedRules), req.user.id]
     )
 
     const template = await db.get('SELECT * FROM permission_templates WHERE id = ?', [result.insertId])
@@ -347,7 +379,7 @@ router.post('/permission-templates', async (req, res) => {
 // PUT /api/admin/permission-templates/:id
 router.put('/permission-templates/:id', async (req, res) => {
   try {
-    const { name, description, scope, org_id, rules } = req.body
+    const { name, description, scope, org_id, rules, permissions } = req.body
 
     const template = await db.get('SELECT * FROM permission_templates WHERE id = ?', [req.params.id])
     if (!template) {
@@ -361,7 +393,8 @@ router.put('/permission-templates/:id', async (req, res) => {
     if (description !== undefined) { updates.push('description = ?'); values.push(description) }
     if (scope !== undefined) { updates.push('scope = ?'); values.push(scope) }
     if (org_id !== undefined) { updates.push('org_id = ?'); values.push(org_id || null) }
-    if (rules !== undefined) { updates.push('rules = ?'); values.push(JSON.stringify(rules)) }
+    const normalizedRules = rules ?? permissions
+    if (normalizedRules !== undefined) { updates.push('rules = ?'); values.push(JSON.stringify(normalizedRules)) }
 
     values.push(req.params.id)
     await db.run(`UPDATE permission_templates SET ${updates.join(', ')} WHERE id = ?`, values)
@@ -444,16 +477,17 @@ router.put('/version-rules', async (req, res) => {
 router.get('/audit-logs', async (req, res) => {
   try {
     const { page, limit, offset } = parsePagination(req.query)
-    const { actor_id, action, resource_type, from_date, to_date } = req.query
+    const { actor_id, action, resource_type, from_date, to_date, start_date, end_date, actor } = req.query
 
     const conditions = []
     const params = []
 
     if (actor_id) { conditions.push('al.actor_id = ?'); params.push(parseInt(actor_id)) }
+    if (actor) { conditions.push('u.username LIKE ?'); params.push(`%${actor}%`) }
     if (action) { conditions.push('al.action LIKE ?'); params.push(`%${action}%`) }
     if (resource_type) { conditions.push('al.resource_type = ?'); params.push(resource_type) }
-    if (from_date) { conditions.push('al.created_at >= ?'); params.push(from_date) }
-    if (to_date) { conditions.push('al.created_at <= ?'); params.push(to_date) }
+    if (from_date || start_date) { conditions.push('al.created_at >= ?'); params.push(from_date || start_date) }
+    if (to_date || end_date) { conditions.push('al.created_at <= ?'); params.push(to_date || end_date) }
 
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
     const countRow = await db.get(`SELECT COUNT(*) as count FROM audit_logs al ${where}`, params)
@@ -502,6 +536,17 @@ router.get('/stats', async (req, res) => {
       code: 200,
       message: 'success',
       data: {
+        total_users: totalUsers.count,
+        active_users: activeUsers.count,
+        total_orgs: totalOrgs.count,
+        total_documents: totalDocs.count,
+        published_documents: publishedDocs.count,
+        total_versions: totalVersions.count,
+        total_comments: totalComments.count,
+        total_attachments: totalAttachments.count,
+        unread_notifications: unreadNotifications.count,
+        users_recent_7d: recentUsers.count,
+        documents_recent_7d: recentDocs.count,
         users: { total: totalUsers.count, active: activeUsers.count, recent_7d: recentUsers.count },
         organizations: { total: totalOrgs.count },
         documents: { total: totalDocs.count, published: publishedDocs.count, recent_7d: recentDocs.count },
@@ -529,7 +574,18 @@ router.get('/config', async (req, res) => {
       try { configMap[c.key] = { value: JSON.parse(c.value), updated_at: c.updated_at } } catch { configMap[c.key] = { value: c.value, updated_at: c.updated_at } }
     })
 
-    return res.json({ code: 200, message: 'success', data: configMap })
+    return res.json({
+      code: 200,
+      message: 'success',
+      data: {
+        platform_name: configMap.platform_name?.value,
+        registration_open: configMap.allow_registration?.value,
+        allow_registration: configMap.allow_registration?.value,
+        max_upload_size: configMap.max_upload_size?.value,
+        maintenance_mode: configMap.maintenance_mode?.value,
+        items: configMap
+      }
+    })
   } catch (err) {
     console.error('Get config error:', err)
     return res.status(500).json({ code: 500, message: '服务器错误' })
@@ -539,14 +595,25 @@ router.get('/config', async (req, res) => {
 // PUT /api/admin/config
 router.put('/config', async (req, res) => {
   try {
-    const { configs } = req.body
+    const inputConfigs = req.body.configs && typeof req.body.configs === 'object'
+      ? req.body.configs
+      : req.body
 
-    if (!configs || typeof configs !== 'object') {
+    if (!inputConfigs || typeof inputConfigs !== 'object') {
       return res.status(400).json({ code: 400, message: '配置数据格式错误' })
     }
 
+    const configKeyMap = {
+      registration_open: 'allow_registration',
+      allow_registration: 'allow_registration',
+      platform_name: 'platform_name',
+      max_upload_size: 'max_upload_size',
+      maintenance_mode: 'maintenance_mode'
+    }
+
     await db.transaction(async (conn) => {
-      for (const [key, value] of Object.entries(configs)) {
+      for (const [rawKey, value] of Object.entries(inputConfigs)) {
+        const key = configKeyMap[rawKey] || rawKey
         await conn.query(
           'INSERT INTO system_config (`key`, value, updated_by, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP) ON DUPLICATE KEY UPDATE value = VALUES(value), updated_by = VALUES(updated_by), updated_at = CURRENT_TIMESTAMP',
           [key, JSON.stringify(value), req.user.id]

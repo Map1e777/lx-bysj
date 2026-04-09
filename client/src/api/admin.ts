@@ -6,7 +6,7 @@ export const adminApi = {
     request.get('/admin/stats'),
 
   // User management
-  getUsers: (params?: { page?: number; limit?: number; search?: string; role?: string; org_id?: number }) =>
+  getUsers: (params?: { page?: number; limit?: number; search?: string; system_role?: string; org_id?: number; is_active?: boolean }) =>
     request.get('/admin/users', { params }),
 
   createUser: (data: { username: string; email: string; password: string; system_role?: string; org_id?: number }) =>
@@ -78,5 +78,5 @@ export const adminApi = {
     max_upload_size?: number
     platform_name?: string
     maintenance_mode?: boolean
-  }) => request.put('/admin/config', data),
+  }) => request.put('/admin/config', { configs: data }),
 }

@@ -58,4 +58,10 @@ export const documentApi = {
   // Export document
   exportDocument: (id: number, format: string) =>
     request.get(`/documents/${id}/export`, { params: { format }, responseType: 'blob' }),
+
+  // Upload image/attachment
+  uploadImage: (id: number, data: FormData) =>
+    request.post(`/documents/${id}/attachments`, data, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    }),
 }

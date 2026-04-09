@@ -30,6 +30,6 @@ export const collaborationApi = {
     request.post(`/invitations/${token}/decline`),
 
   // Get documents shared with me
-  getSharedDocuments: (params?: { page?: number; limit?: number }) =>
+  getSharedDocuments: (params?: { page?: number; limit?: number; search?: string; role?: string }) =>
     request.get('/documents', { params: { ...params, scope: 'shared' } }),
 }

@@ -21,7 +21,7 @@ router.get('/members', async (req, res) => {
   if (!ensureOrgContext(req, res)) return
   try {
     const { page, limit, offset } = parsePagination(req.query)
-    const { search, org_role } = req.query
+    const { search, org_role, dept_id } = req.query
     const orgId = req.user.org_id
 
     const conditions = ['u.org_id = ?']
@@ -32,6 +32,7 @@ router.get('/members', async (req, res) => {
       params.push(`%${search}%`, `%${search}%`)
     }
     if (org_role) { conditions.push('u.org_role = ?'); params.push(org_role) }
+    if (dept_id) { conditions.push('u.dept_id = ?'); params.push(parseInt(dept_id)) }
 
     const where = `WHERE ${conditions.join(' AND ')}`
     const countRow = await db.get(`SELECT COUNT(*) as count FROM users u ${where}`, params)
@@ -59,8 +60,9 @@ router.get('/members', async (req, res) => {
 router.post('/members/invite', async (req, res) => {
   if (!ensureOrgContext(req, res)) return
   try {
-    const { email, org_role = 'member', dept_id } = req.body
+    const { email, org_role, role, dept_id } = req.body
     const orgId = req.user.org_id
+    const normalizedRole = org_role || role || 'member'
 
     if (!email) {
       return res.status(400).json({ code: 400, message: '邮箱不能为空' })
@@ -81,10 +83,10 @@ router.post('/members/invite', async (req, res) => {
 
     await db.run(
       'UPDATE users SET org_id = ?, org_role = ?, dept_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-      [orgId, org_role, dept_id || null, user.id]
+      [orgId, normalizedRole, dept_id || null, user.id]
     )
 
-    return res.json({ code: 200, message: '用户已添加到组织', data: { user_id: user.id, org_role } })
+    return res.json({ code: 200, message: '用户已添加到组织', data: { user_id: user.id, org_role: normalizedRole } })
   } catch (err) {
     console.error('Invite org member error:', err)
     return res.status(500).json({ code: 500, message: '服务器错误' })
@@ -121,11 +123,12 @@ router.delete('/members/:uid', async (req, res) => {
 router.put('/members/:uid/role', async (req, res) => {
   if (!ensureOrgContext(req, res)) return
   try {
-    const { org_role, dept_id } = req.body
+    const { org_role, role, dept_id } = req.body
     const targetId = req.params.uid
     const orgId = req.user.org_id
+    const normalizedRole = org_role || role
 
-    if (!org_role) {
+    if (!normalizedRole) {
       return res.status(400).json({ code: 400, message: '角色不能为空' })
     }
 
@@ -135,7 +138,7 @@ router.put('/members/:uid/role', async (req, res) => {
     }
 
     const updates = ['org_role = ?', 'updated_at = CURRENT_TIMESTAMP']
-    const values = [org_role]
+    const values = [normalizedRole]
 
     if (dept_id !== undefined) { updates.push('dept_id = ?'); values.push(dept_id) }
 
@@ -274,13 +277,14 @@ router.get('/documents', async (req, res) => {
   if (!ensureOrgContext(req, res)) return
   try {
     const { page, limit, offset } = parsePagination(req.query)
-    const { status, search } = req.query
+    const { status, search, dept_id } = req.query
     const orgId = req.user.org_id
 
     const conditions = ['d.org_id = ?', 'd.deleted_at IS NULL']
     const params = [orgId]
 
     if (status) { conditions.push('d.status = ?'); params.push(status) }
+    if (dept_id) { conditions.push('d.dept_id = ?'); params.push(parseInt(dept_id)) }
     if (search) {
       conditions.push('(d.title LIKE ? OR d.content LIKE ?)')
       params.push(`%${search}%`, `%${search}%`)
@@ -291,11 +295,14 @@ router.get('/documents', async (req, res) => {
     const total = countRow.count
 
     const docs = await db.all(`
-      SELECT d.id, d.title, d.status, d.visibility, d.owner_id, d.word_count,
+      SELECT d.id, d.title, d.status, d.visibility, d.owner_id, d.dept_id, d.word_count,
              d.current_version, d.created_at, d.updated_at,
-             u.username as owner_username
+             u.username as owner_username,
+             dept.name as dept_name,
+             (SELECT COUNT(*) FROM document_permissions dp WHERE dp.document_id = d.id AND dp.role != 'creator') as collaborator_count
       FROM documents d
       LEFT JOIN users u ON d.owner_id = u.id
+      LEFT JOIN departments dept ON d.dept_id = dept.id
       ${where}
       ORDER BY d.updated_at DESC
       LIMIT ? OFFSET ?
@@ -308,11 +315,29 @@ router.get('/documents', async (req, res) => {
   }
 })
 
+// PUT /api/org/documents/:id/archive
+router.put('/documents/:id/archive', async (req, res) => {
+  if (!ensureOrgContext(req, res)) return
+  try {
+    const doc = await db.get('SELECT id, org_id, status FROM documents WHERE id = ? AND deleted_at IS NULL', [req.params.id])
+    if (!doc || doc.org_id !== req.user.org_id) {
+      return res.status(404).json({ code: 404, message: '文档不存在或不属于当前组织' })
+    }
+
+    await db.run("UPDATE documents SET status = 'archived', updated_at = CURRENT_TIMESTAMP WHERE id = ?", [req.params.id])
+    return res.json({ code: 200, message: '文档已归档' })
+  } catch (err) {
+    console.error('Force archive org document error:', err)
+    return res.status(500).json({ code: 500, message: '服务器错误' })
+  }
+})
+
 // GET /api/org/audit
 router.get('/audit', async (req, res) => {
   if (!ensureOrgContext(req, res)) return
   try {
     const { page, limit, offset } = parsePagination(req.query)
+    const { start_date, end_date, doc_title, user_name } = req.query
     const orgId = req.user.org_id
 
     const orgMemberIds = (await db.all('SELECT id FROM users WHERE org_id = ?', [orgId])).map(u => u.id)
@@ -321,17 +346,35 @@ router.get('/audit', async (req, res) => {
     }
 
     const placeholders = orgMemberIds.map(() => '?').join(',')
-    const countRow = await db.get(`SELECT COUNT(*) as count FROM audit_logs WHERE actor_id IN (${placeholders})`, orgMemberIds)
+    const conditions = [`al.actor_id IN (${placeholders})`]
+    const params = [...orgMemberIds]
+
+    if (start_date) { conditions.push('al.created_at >= ?'); params.push(start_date) }
+    if (end_date) { conditions.push('al.created_at <= ?'); params.push(end_date) }
+    if (user_name) { conditions.push('u.username LIKE ?'); params.push(`%${user_name}%`) }
+    if (doc_title) { conditions.push('doc.title LIKE ?'); params.push(`%${doc_title}%`) }
+
+    const where = `WHERE ${conditions.join(' AND ')}`
+    const countRow = await db.get(`
+      SELECT COUNT(*) as count
+      FROM audit_logs al
+      LEFT JOIN users u ON al.actor_id = u.id
+      LEFT JOIN documents doc ON al.resource_type = 'document' AND CAST(al.resource_id AS UNSIGNED) = doc.id
+      ${where}
+    `, params)
     const total = countRow.count
 
     const logs = await db.all(`
-      SELECT al.*, u.username as actor_username
+      SELECT al.*, u.username as actor_username,
+             doc.id as document_id,
+             doc.title as document_title
       FROM audit_logs al
       LEFT JOIN users u ON al.actor_id = u.id
-      WHERE al.actor_id IN (${placeholders})
+      LEFT JOIN documents doc ON al.resource_type = 'document' AND CAST(al.resource_id AS UNSIGNED) = doc.id
+      ${where}
       ORDER BY al.created_at DESC
       LIMIT ? OFFSET ?
-    `, [...orgMemberIds, limit, offset])
+    `, [...params, limit, offset])
 
     return res.json({ code: 200, message: 'success', data: paginatedResponse(logs, total, page, limit) })
   } catch (err) {
@@ -346,12 +389,13 @@ router.get('/stats', async (req, res) => {
   try {
     const orgId = req.user.org_id
 
-    const [memberCount, docCount, publishedDocCount, deptCount, versionCount, org] = await Promise.all([
+    const [memberCount, docCount, publishedDocCount, deptCount, versionCount, newDocsThisMonth, org] = await Promise.all([
       db.get('SELECT COUNT(*) as count FROM users WHERE org_id = ?', [orgId]),
       db.get('SELECT COUNT(*) as count FROM documents WHERE org_id = ? AND deleted_at IS NULL', [orgId]),
       db.get("SELECT COUNT(*) as count FROM documents WHERE org_id = ? AND status = 'published' AND deleted_at IS NULL", [orgId]),
       db.get('SELECT COUNT(*) as count FROM departments WHERE org_id = ?', [orgId]),
       db.get('SELECT COUNT(*) as count FROM document_versions dv INNER JOIN documents d ON dv.document_id = d.id WHERE d.org_id = ?', [orgId]),
+      db.get('SELECT COUNT(*) as count FROM documents WHERE org_id = ? AND deleted_at IS NULL AND created_at >= DATE_FORMAT(NOW(), "%Y-%m-01")', [orgId]),
       db.get('SELECT id, name, slug, description, logo_url, created_at FROM orgs WHERE id = ?', [orgId])
     ])
 
@@ -360,6 +404,13 @@ router.get('/stats', async (req, res) => {
       message: 'success',
       data: {
         org,
+        member_count: memberCount.count,
+        document_count: docCount.count,
+        published_document_count: publishedDocCount.count,
+        dept_count: deptCount.count,
+        department_count: deptCount.count,
+        version_count: versionCount.count,
+        new_docs_this_month: newDocsThisMonth.count,
         stats: {
           member_count: memberCount.count,
           document_count: docCount.count,
@@ -371,6 +422,59 @@ router.get('/stats', async (req, res) => {
     })
   } catch (err) {
     console.error('Org stats error:', err)
+    return res.status(500).json({ code: 500, message: '服务器错误' })
+  }
+})
+
+// GET /api/org/audit/export
+router.get('/audit/export', async (req, res) => {
+  if (!ensureOrgContext(req, res)) return
+  try {
+    const orgId = req.user.org_id
+    const { start_date, end_date, doc_title, user_name } = req.query
+    const orgMemberIds = (await db.all('SELECT id FROM users WHERE org_id = ?', [orgId])).map(u => u.id)
+
+    if (orgMemberIds.length === 0) {
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8')
+      return res.send('\uFEFF时间,操作人,动作,文档标题,资源类型,资源ID\n')
+    }
+
+    const placeholders = orgMemberIds.map(() => '?').join(',')
+    const conditions = [`al.actor_id IN (${placeholders})`]
+    const params = [...orgMemberIds]
+
+    if (start_date) { conditions.push('al.created_at >= ?'); params.push(start_date) }
+    if (end_date) { conditions.push('al.created_at <= ?'); params.push(end_date) }
+    if (user_name) { conditions.push('u.username LIKE ?'); params.push(`%${user_name}%`) }
+    if (doc_title) { conditions.push('doc.title LIKE ?'); params.push(`%${doc_title}%`) }
+
+    const rows = await db.all(`
+      SELECT al.created_at, u.username as actor_username, al.action, doc.title as document_title, al.resource_type, al.resource_id
+      FROM audit_logs al
+      LEFT JOIN users u ON al.actor_id = u.id
+      LEFT JOIN documents doc ON al.resource_type = 'document' AND CAST(al.resource_id AS UNSIGNED) = doc.id
+      WHERE ${conditions.join(' AND ')}
+      ORDER BY al.created_at DESC
+    `, params)
+
+    const escapeCsv = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`
+    const lines = [
+      '\uFEFF时间,操作人,动作,文档标题,资源类型,资源ID',
+      ...rows.map(row => [
+        escapeCsv(row.created_at),
+        escapeCsv(row.actor_username || ''),
+        escapeCsv(row.action),
+        escapeCsv(row.document_title || ''),
+        escapeCsv(row.resource_type),
+        escapeCsv(row.resource_id)
+      ].join(','))
+    ]
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8')
+    res.setHeader('Content-Disposition', 'attachment; filename="org-audit-report.csv"')
+    return res.send(lines.join('\n'))
+  } catch (err) {
+    console.error('Export org audit error:', err)
     return res.status(500).json({ code: 500, message: '服务器错误' })
   }
 })

@@ -37,7 +37,7 @@
         </el-table-column>
         <el-table-column label="部门" width="140">
           <template #default="{ row }">
-            <span>{{ row.department?.name || '未分配' }}</span>
+            <span>{{ row.dept_name || '未分配' }}</span>
           </template>
         </el-table-column>
         <el-table-column label="角色" width="140">
@@ -55,7 +55,7 @@
         </el-table-column>
         <el-table-column label="加入时间" width="140">
           <template #default="{ row }">
-            <span class="time-text">{{ formatDate(row.joined_at) }}</span>
+            <span class="time-text">{{ formatDate(row.created_at) }}</span>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="160" fixed="right">
@@ -168,6 +168,7 @@ async function loadMembers() {
       limit: pageSize.value,
       search: search.value || undefined,
       dept_id: deptFilter.value || undefined,
+      org_role: roleFilter.value || undefined,
     }) as any
     members.value = res.data?.list || []
     total.value = res.data?.total || 0

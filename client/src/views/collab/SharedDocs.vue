@@ -34,8 +34,8 @@
         <el-table-column label="所有者" width="130">
           <template #default="{ row }">
             <div class="owner-cell">
-              <el-avatar :size="24">{{ row.owner?.username?.charAt(0) }}</el-avatar>
-              <span>{{ row.owner?.username }}</span>
+              <el-avatar :size="24">{{ row.owner_username?.charAt(0) }}</el-avatar>
+              <span>{{ row.owner_username }}</span>
             </div>
           </template>
         </el-table-column>
@@ -118,6 +118,8 @@ async function loadDocs() {
     const res = await collaborationApi.getSharedDocuments({
       page: currentPage.value,
       limit: pageSize.value,
+      search: searchQuery.value || undefined,
+      role: roleFilter.value || undefined,
     }) as any
     documents.value = res.data?.list || []
     total.value = res.data?.total || 0
@@ -141,12 +143,12 @@ function openDoc(row: any) {
 }
 
 function roleTagType(role: string) {
-  const map: Record<string, string> = { editor: 'success', commenter: 'primary', viewer: 'info' }
+  const map: Record<string, string> = { creator: 'warning', editor: 'success', commenter: 'primary', viewer: 'info' }
   return map[role] || 'info'
 }
 
 function roleLabel(role: string) {
-  const map: Record<string, string> = { editor: '编辑者', commenter: '评论者', viewer: '查看者' }
+  const map: Record<string, string> = { creator: '创建者', editor: '编辑者', commenter: '评论者', viewer: '查看者' }
   return map[role] || role
 }
 

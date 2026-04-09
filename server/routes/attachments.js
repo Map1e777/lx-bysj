@@ -70,24 +70,25 @@ router.get('/:id/attachments', authenticateToken, requireDocPermission('read'), 
 
 // POST /api/documents/:id/attachments
 router.post('/:id/attachments', authenticateToken, requireDocPermission('write'), (req, res) => {
-  upload.single('file')(req, res, async (err) => {
-    if (err) {
-      if (err.code === 'LIMIT_FILE_SIZE') {
+  upload.fields([{ name: 'file', maxCount: 1 }, { name: 'image', maxCount: 1 }])(req, res, async (uploadErr) => {
+    if (uploadErr) {
+      if (uploadErr.code === 'LIMIT_FILE_SIZE') {
         return res.status(400).json({ code: 400, message: '文件大小超出限制' })
       }
-      return res.status(400).json({ code: 400, message: err.message || '文件上传失败' })
+      return res.status(400).json({ code: 400, message: uploadErr.message || '文件上传失败' })
     }
 
-    if (!req.file) {
+    const uploadedFile = (req.files?.file && req.files.file[0]) || (req.files?.image && req.files.image[0])
+    if (!uploadedFile) {
       return res.status(400).json({ code: 400, message: '请选择要上传的文件' })
     }
 
     try {
-      const relPath = path.relative(path.resolve('./'), req.file.path).replace(/\\/g, '/')
+      const relPath = path.relative(path.resolve('./'), uploadedFile.path).replace(/\\/g, '/')
 
       const result = await db.run(
         'INSERT INTO attachments (document_id, uploader_id, filename, original_name, mime_type, file_size, file_path) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [req.params.id, req.user.id, req.file.filename, req.file.originalname, req.file.mimetype, req.file.size, relPath]
+        [req.params.id, req.user.id, uploadedFile.filename, uploadedFile.originalname, uploadedFile.mimetype, uploadedFile.size, relPath]
       )
 
       const attachment = await db.get(`
@@ -96,7 +97,14 @@ router.post('/:id/attachments', authenticateToken, requireDocPermission('write')
         WHERE a.id = ?
       `, [result.insertId])
 
-      return res.status(201).json({ code: 201, message: '文件上传成功', data: attachment })
+      return res.status(201).json({
+        code: 201,
+        message: '文件上传成功',
+        data: {
+          ...attachment,
+          url: `/${relPath}`
+        }
+      })
     } catch (dbErr) {
       console.error('Save attachment error:', dbErr)
       return res.status(500).json({ code: 500, message: '服务器错误' })
