@@ -1,0 +1,25 @@
+@startuml
+left to right direction
+skinparam packageStyle rectangle
+skinparam linetype ortho
+
+actor "用户" as User
+
+rectangle "文档在线协作与版本管理系统" {
+  usecase "创建文档" as UC_Create
+  usecase "查看文档" as UC_View
+  usecase "编辑文档" as UC_Edit
+  usecase "发布文档" as UC_Publish
+  usecase "归档文档" as UC_Archive
+  usecase "删除文档" as UC_Delete
+  usecase "导出文档" as UC_Export
+}
+
+User --> UC_Create
+User --> UC_View
+User --> UC_Edit
+User --> UC_Publish
+User --> UC_Archive
+User --> UC_Delete
+User --> UC_Export
+@enduml

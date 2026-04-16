@@ -1,0 +1,19 @@
+@startuml
+left to right direction
+skinparam packageStyle rectangle
+skinparam linetype ortho
+
+actor "用户" as User
+
+rectangle "文档在线协作与版本管理系统" {
+  usecase "用户注册" as UC_Register
+  usecase "用户登录" as UC_Login
+  usecase "查看个人信息" as UC_Profile
+  usecase "修改密码" as UC_Password
+}
+
+User --> UC_Register
+User --> UC_Login
+User --> UC_Profile
+User --> UC_Password
+@enduml

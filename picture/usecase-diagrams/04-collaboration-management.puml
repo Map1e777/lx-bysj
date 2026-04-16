@@ -1,0 +1,22 @@
+@startuml
+left to right direction
+skinparam packageStyle rectangle
+skinparam linetype ortho
+
+actor "文档创建者" as Creator
+actor "协作者" as Collaborator
+
+rectangle "文档在线协作与版本管理系统" {
+  usecase "邀请协作者" as UC_Invite
+  usecase "管理协作权限" as UC_Permission
+  usecase "接受协作邀请" as UC_Accept
+  usecase "拒绝协作邀请" as UC_Reject
+  usecase "查看共享文档" as UC_SharedDoc
+}
+
+Creator --> UC_Invite
+Creator --> UC_Permission
+Collaborator --> UC_Accept
+Collaborator --> UC_Reject
+Collaborator --> UC_SharedDoc
+@enduml

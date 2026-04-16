@@ -1,0 +1,21 @@
+@startuml
+left to right direction
+skinparam packageStyle rectangle
+skinparam linetype ortho
+
+actor "组织管理员" as OrgAdmin
+
+rectangle "文档在线协作与版本管理系统" {
+  usecase "管理组织成员" as UC_Member
+  usecase "管理部门信息" as UC_Dept
+  usecase "管理组织文档" as UC_OrgDoc
+  usecase "查看版本审计" as UC_Audit
+  usecase "查看组织统计" as UC_Stat
+}
+
+OrgAdmin --> UC_Member
+OrgAdmin --> UC_Dept
+OrgAdmin --> UC_OrgDoc
+OrgAdmin --> UC_Audit
+OrgAdmin --> UC_Stat
+@enduml

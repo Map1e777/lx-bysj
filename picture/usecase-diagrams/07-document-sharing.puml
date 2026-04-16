@@ -1,0 +1,18 @@
+@startuml
+left to right direction
+skinparam packageStyle rectangle
+skinparam linetype ortho
+
+actor "文档创建者" as Creator
+actor "访客" as Guest
+
+rectangle "文档在线协作与版本管理系统" {
+  usecase "生成分享链接" as UC_GenerateLink
+  usecase "关闭分享链接" as UC_CloseLink
+  usecase "查看分享文档" as UC_ViewShared
+}
+
+Creator --> UC_GenerateLink
+Creator --> UC_CloseLink
+Guest --> UC_ViewShared
+@enduml

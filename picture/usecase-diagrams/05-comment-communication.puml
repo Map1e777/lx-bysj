@@ -1,0 +1,19 @@
+@startuml
+left to right direction
+skinparam packageStyle rectangle
+skinparam linetype ortho
+
+actor "用户" as User
+
+rectangle "文档在线协作与版本管理系统" {
+  usecase "查看评论" as UC_ViewComment
+  usecase "发表评论" as UC_AddComment
+  usecase "回复评论" as UC_ReplyComment
+  usecase "解决评论" as UC_ResolveComment
+}
+
+User --> UC_ViewComment
+User --> UC_AddComment
+User --> UC_ReplyComment
+User --> UC_ResolveComment
+@enduml

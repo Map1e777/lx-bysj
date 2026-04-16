@@ -1,0 +1,19 @@
+@startuml
+left to right direction
+skinparam packageStyle rectangle
+skinparam linetype ortho
+
+actor "用户" as User
+
+rectangle "文档在线协作与版本管理系统" {
+  usecase "查看通知" as UC_ViewNotif
+  usecase "处理协作通知" as UC_HandleInviteNotif
+  usecase "查看评论通知" as UC_ViewCommentNotif
+  usecase "查看版本通知" as UC_ViewVersionNotif
+}
+
+User --> UC_ViewNotif
+User --> UC_HandleInviteNotif
+User --> UC_ViewCommentNotif
+User --> UC_ViewVersionNotif
+@enduml
