@@ -1,0 +1,13 @@
+%%{init: {'flowchart': {'nodeSpacing': 60, 'rankSpacing': 80, 'curve': 'linear'}} }%%
+flowchart TB
+    A[协作管理模块]
+    A --> B[文档创建者]
+    A --> C[文档协作者]
+
+    B --> D[邀请协作者]
+    B --> E[分配协作权限]
+    B --> F[管理共享成员]
+
+    C --> G[接受邀请]
+    C --> H[拒绝邀请]
+    C --> I[访问共享文档]

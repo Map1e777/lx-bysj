@@ -1,0 +1,203 @@
+erDiagram
+    ORGS {
+        int id PK
+        string name
+        string slug
+        string description
+        string logo_url
+        int owner_id FK
+        string settings
+        datetime created_at
+        datetime updated_at
+    }
+
+    DEPARTMENTS {
+        int id PK
+        int org_id FK
+        int parent_id FK
+        string name
+        datetime created_at
+    }
+
+    USERS {
+        int id PK
+        string username
+        string email
+        string password_hash
+        string avatar_url
+        string system_role
+        int org_id FK
+        int dept_id FK
+        string org_role
+        boolean is_active
+        datetime last_login_at
+        datetime created_at
+        datetime updated_at
+    }
+
+    DOCUMENTS {
+        int id PK
+        string title
+        text content
+        int owner_id FK
+        int org_id FK
+        int dept_id FK
+        string status
+        string visibility
+        string share_token
+        datetime share_expires_at
+        text tags
+        int word_count
+        int current_version
+        datetime created_at
+        datetime updated_at
+        datetime deleted_at
+    }
+
+    DOCUMENT_VERSIONS {
+        int id PK
+        int document_id FK
+        int version_num
+        string title
+        text content
+        text content_diff
+        int word_count
+        string label
+        int created_by FK
+        string change_summary
+        boolean is_major
+        datetime created_at
+    }
+
+    DOCUMENT_PERMISSIONS {
+        int id PK
+        int document_id FK
+        int user_id FK
+        string role
+        int granted_by FK
+        datetime granted_at
+        datetime expires_at
+    }
+
+    INVITATIONS {
+        int id PK
+        int document_id FK
+        int inviter_id FK
+        string invitee_email
+        int invitee_id FK
+        string role
+        string token
+        string status
+        datetime created_at
+        datetime expires_at
+        datetime responded_at
+    }
+
+    COMMENTS {
+        int id PK
+        int document_id FK
+        int parent_id FK
+        int author_id FK
+        text content
+        text selection_ref
+        boolean is_resolved
+        int resolved_by FK
+        datetime resolved_at
+        datetime created_at
+        datetime updated_at
+        datetime deleted_at
+    }
+
+    ATTACHMENTS {
+        int id PK
+        int document_id FK
+        int uploader_id FK
+        string filename
+        string original_name
+        string mime_type
+        int file_size
+        string file_path
+        datetime created_at
+    }
+
+    NOTIFICATIONS {
+        int id PK
+        int user_id FK
+        string type
+        text payload
+        boolean is_read
+        datetime created_at
+    }
+
+    AUDIT_LOGS {
+        int id PK
+        int actor_id FK
+        string action
+        string resource_type
+        string resource_id
+        text old_value
+        text new_value
+        string ip_address
+        text user_agent
+        datetime created_at
+    }
+
+    PERMISSION_TEMPLATES {
+        int id PK
+        string name
+        string description
+        string scope
+        int org_id FK
+        text rules
+        int created_by FK
+        datetime created_at
+        datetime updated_at
+    }
+
+    VERSION_RULES {
+        int id PK
+        string scope
+        int org_id FK
+        int auto_save_interval
+        int max_versions_per_doc
+        boolean auto_version_on_save
+        int version_retention_days
+        datetime created_at
+        datetime updated_at
+    }
+
+    SYSTEM_CONFIG {
+        string key PK
+        text value
+        int updated_by FK
+        datetime updated_at
+    }
+
+    ORGS ||--o{ DEPARTMENTS : contains
+    ORGS ||--o{ USERS : has
+    ORGS ||--o{ DOCUMENTS : owns
+    ORGS ||--o{ PERMISSION_TEMPLATES : defines
+    ORGS ||--o{ VERSION_RULES : applies
+
+    DEPARTMENTS ||--o{ USERS : includes
+    DEPARTMENTS ||--o{ DOCUMENTS : classifies
+    DEPARTMENTS ||--o{ DEPARTMENTS : parent_of
+
+    USERS ||--o{ DOCUMENTS : creates
+    USERS ||--o{ DOCUMENT_VERSIONS : creates
+    USERS ||--o{ DOCUMENT_PERMISSIONS : assigned_to
+    USERS ||--o{ INVITATIONS : sends
+    USERS ||--o{ COMMENTS : writes
+    USERS ||--o{ ATTACHMENTS : uploads
+    USERS ||--o{ NOTIFICATIONS : receives
+    USERS ||--o{ AUDIT_LOGS : operates
+    USERS ||--o{ PERMISSION_TEMPLATES : creates
+    USERS ||--o{ SYSTEM_CONFIG : updates
+
+    DOCUMENTS ||--o{ DOCUMENT_VERSIONS : has
+    DOCUMENTS ||--o{ DOCUMENT_PERMISSIONS : grants
+    DOCUMENTS ||--o{ INVITATIONS : generates
+    DOCUMENTS ||--o{ COMMENTS : has
+    DOCUMENTS ||--o{ ATTACHMENTS : contains
+
+    COMMENTS ||--o{ COMMENTS : replies_to

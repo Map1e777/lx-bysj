@@ -1,0 +1,50 @@
+flowchart LR
+    U[用户]
+    V[访客]
+    OA[组织管理员]
+    SA[系统管理员]
+
+    subgraph Client[前端客户端 Vue3]
+        C1[页面视图 Views]
+        C2[路由 Router]
+        C3[状态管理 Pinia]
+        C4[API请求 Axios]
+        C5[实时通知 Socket.io Client]
+        C6[富文本编辑器 Tiptap]
+    end
+
+    subgraph Server[后端服务 Node.js + Express]
+        S1[路由层 Routes]
+        S2[中间件 Middleware\n认证/权限/审计]
+        S3[业务服务层 Services]
+        S4[工具层 Utils]
+    end
+
+    subgraph DB[数据与资源层]
+        D1[(MySQL)]
+        D2[(附件存储 Uploads)]
+        D3[WebSocket推送]
+    end
+
+    U --> C1
+    V --> C1
+    OA --> C1
+    SA --> C1
+
+    C1 --> C2
+    C1 --> C3
+    C1 --> C4
+    C1 --> C5
+    C1 --> C6
+
+    C4 --> S1
+    C5 --> D3
+
+    S1 --> S2
+    S2 --> S3
+    S3 --> S4
+    S3 --> D1
+    S3 --> D2
+    S3 --> D3
+
+    D3 --> C5

@@ -1,0 +1,10 @@
+%%{init: {'flowchart': {'nodeSpacing': 60, 'rankSpacing': 80, 'curve': 'linear'}} }%%
+flowchart TB
+    A[文档分享模块]
+    A --> B[文档创建者]
+    A --> C[访客]
+
+    B --> D[生成分享链接]
+    B --> E[关闭分享链接]
+
+    C --> F[访问公开文档]
