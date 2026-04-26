@@ -15,9 +15,9 @@
       <template v-if="compareResult">
         <!-- Compare Header -->
         <div class="compare-header-bar">
-          <div class="compare-side">
-            <div class="compare-version-info">
-              <el-tag type="info" size="large">v{{ v1Info?.version_number }}</el-tag>
+        <div class="compare-side">
+          <div class="compare-version-info">
+              <el-tag type="info" size="large">v{{ v1Info?.version_num }}</el-tag>
               <span class="compare-label" v-if="v1Info?.label">{{ v1Info.label }}</span>
               <span class="compare-time">{{ formatTime(v1Info?.created_at) }}</span>
             </div>
@@ -26,46 +26,22 @@
             <el-icon><Sort /></el-icon>
             <span>对比中</span>
           </div>
-          <div class="compare-side">
-            <div class="compare-version-info">
-              <el-tag type="success" size="large">v{{ v2Info?.version_number }}</el-tag>
+        <div class="compare-side">
+          <div class="compare-version-info">
+              <el-tag type="success" size="large">v{{ v2Info?.version_num }}</el-tag>
               <span class="compare-label" v-if="v2Info?.label">{{ v2Info.label }}</span>
               <span class="compare-time">{{ formatTime(v2Info?.created_at) }}</span>
             </div>
           </div>
         </div>
 
-        <!-- Stats -->
-        <div class="compare-stats">
-          <el-tag type="success">
-            <el-icon><Plus /></el-icon>
-            新增 {{ compareResult.additions }} 处
-          </el-tag>
-          <el-tag type="danger">
-            <el-icon><Minus /></el-icon>
-            删除 {{ compareResult.deletions }} 处
-          </el-tag>
-          <el-tag type="warning">
-            <el-icon><Edit /></el-icon>
-            修改 {{ compareResult.changes }} 处
-          </el-tag>
-        </div>
-
-        <!-- Diff View -->
         <div class="diff-view">
-          <div class="diff-side diff-old">
+          <div class="diff-panel">
             <div class="diff-side-title">
               <el-icon><Document /></el-icon>
-              旧版本 (v{{ v1Info?.version_number }})
+              变更明细
             </div>
-            <div class="diff-content" v-html="compareResult.old_html" />
-          </div>
-          <div class="diff-side diff-new">
-            <div class="diff-side-title">
-              <el-icon><Document /></el-icon>
-              新版本 (v{{ v2Info?.version_number }})
-            </div>
-            <div class="diff-content" v-html="compareResult.new_html" />
+            <div class="diff-content" v-html="compareResult.diff_html" />
           </div>
         </div>
       </template>
@@ -190,21 +166,11 @@ onMounted(() => {
   font-size: 20px;
 }
 
-.compare-stats {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 20px;
-}
-
 .diff-view {
-  display: flex;
-  gap: 16px;
   min-height: 400px;
 }
 
-.diff-side {
-  flex: 1;
+.diff-panel {
   border: 1px solid #e4e7ed;
   border-radius: 8px;
   overflow: hidden;
@@ -220,16 +186,6 @@ onMounted(() => {
   color: #606266;
   background: #fafafa;
   border-bottom: 1px solid #e4e7ed;
-}
-
-.diff-old .diff-side-title {
-  background: #ffeef0;
-  color: #cb2431;
-}
-
-.diff-new .diff-side-title {
-  background: #e6ffed;
-  color: #22863a;
 }
 
 .diff-content {

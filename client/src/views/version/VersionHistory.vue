@@ -31,9 +31,9 @@
       >
         <!-- Selection checkbox -->
         <el-checkbox
-          :model-value="selectedVersions.includes(version.id)"
-          @change="(val: boolean) => toggleSelect(version.id, val)"
-          :disabled="!selectedVersions.includes(version.id) && selectedVersions.length >= 2"
+          :model-value="selectedVersions.includes(version.version_num)"
+          @change="(val: boolean) => toggleSelect(version.version_num, val)"
+          :disabled="!selectedVersions.includes(version.version_num) && selectedVersions.length >= 2"
         />
 
         <!-- Version Timeline Line -->
@@ -49,14 +49,14 @@
         <div class="version-content">
           <div class="version-header">
             <div class="version-title-area">
-              <span class="version-number">v{{ version.version_number }}</span>
+              <span class="version-number">v{{ version.version_num }}</span>
               <el-tag v-if="version.label" type="warning" size="small">{{ version.label }}</el-tag>
-              <el-tag v-if="version.is_current" type="success" size="small">当前版本</el-tag>
-              <el-tag v-if="version.is_checkpoint" type="danger" size="small">手动节点</el-tag>
+              <el-tag v-if="isCurrentVersion(version)" type="success" size="small">当前版本</el-tag>
+              <el-tag v-if="version.is_major" type="danger" size="small">手动节点</el-tag>
             </div>
             <div class="version-meta">
-              <el-avatar :size="24">{{ version.created_by?.username?.charAt(0) }}</el-avatar>
-              <span>{{ version.created_by?.username }}</span>
+              <el-avatar :size="24">{{ version.created_by_username?.charAt(0) }}</el-avatar>
+              <span>{{ version.created_by_username || '-' }}</span>
               <span class="version-time">{{ formatTime(version.created_at) }}</span>
               <span class="word-count">{{ version.word_count || 0 }} 字</span>
             </div>
@@ -75,7 +75,7 @@
               type="warning"
               size="small"
               @click="restoreVersion(version)"
-              v-if="!version.is_current"
+              v-if="!isCurrentVersion(version)"
             >
               恢复此版本
             </el-button>
@@ -84,7 +84,7 @@
               type="danger"
               size="small"
               @click="deleteVersion(version)"
-              v-if="!version.is_current && !version.is_checkpoint"
+              v-if="!isCurrentVersion(version) && !version.is_major"
             >
               删除
             </el-button>
@@ -111,7 +111,7 @@
       <div v-if="previewVersion">
         <div class="preview-meta">
           <el-tag type="warning" v-if="previewVersion.label">{{ previewVersion.label }}</el-tag>
-          <span>v{{ previewVersion.version_number }}</span>
+          <span>v{{ previewVersion.version_num }}</span>
           <span>{{ formatTime(previewVersion.created_at) }}</span>
           <span>{{ previewVersion.word_count }} 字</span>
         </div>
@@ -138,6 +138,7 @@ const total = ref(0)
 const currentPage = ref(1)
 const pageSize = ref(20)
 const docTitle = ref('')
+const currentVersionNum = ref<number | null>(null)
 const selectedVersions = ref<number[]>([])
 const showPreview = ref(false)
 const previewVersion = ref<any>(null)
@@ -159,6 +160,7 @@ async function loadDocInfo() {
   try {
     const res = await documentApi.getDocument(docId) as any
     docTitle.value = res.data.title
+    currentVersionNum.value = res.data.current_version ?? null
   } catch (e) {}
 }
 
@@ -174,7 +176,7 @@ function toggleSelect(id: number, val: boolean) {
 
 async function viewVersion(version: any) {
   try {
-    const res = await versionApi.getVersion(docId, version.id) as any
+    const res = await versionApi.getVersion(docId, version.version_num) as any
     previewVersion.value = res.data
     showPreview.value = true
   } catch (e) {
@@ -185,12 +187,13 @@ async function viewVersion(version: any) {
 async function restoreVersion(version: any) {
   try {
     await ElMessageBox.confirm(
-      `确定要恢复到版本 v${version.version_number} 吗？当前内容将被替换。`,
+      `确定要恢复到版本 v${version.version_num} 吗？当前内容将被替换。`,
       '恢复版本',
       { type: 'warning', confirmButtonText: '确认恢复' }
     )
-    await versionApi.restoreVersion(docId, version.id)
+    await versionApi.restoreVersion(docId, version.version_num)
     ElMessage.success('版本已恢复')
+    await loadDocInfo()
     loadVersions()
   } catch (e: any) {
     if (e !== 'cancel') ElMessage.error('恢复失败')
@@ -200,11 +203,11 @@ async function restoreVersion(version: any) {
 async function deleteVersion(version: any) {
   try {
     await ElMessageBox.confirm(
-      `确定要删除版本 v${version.version_number} 吗？此操作不可撤销。`,
+      `确定要删除版本 v${version.version_num} 吗？此操作不可撤销。`,
       '删除版本',
       { type: 'error', confirmButtonText: '删除' }
     )
-    await versionApi.deleteVersion(docId, version.id)
+    await versionApi.deleteVersion(docId, version.version_num)
     ElMessage.success('版本已删除')
     loadVersions()
   } catch (e: any) {
@@ -218,6 +221,10 @@ function compareVersions() {
     path: `/documents/${docId}/versions/compare`,
     query: { v1: selectedVersions.value[0], v2: selectedVersions.value[1] }
   })
+}
+
+function isCurrentVersion(version: any) {
+  return version.version_num === currentVersionNum.value
 }
 
 function formatTime(time: string) {
