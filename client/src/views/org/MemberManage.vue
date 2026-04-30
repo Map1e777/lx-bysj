@@ -225,7 +225,7 @@ async function handleAddMember() {
 
 function openMoveDept(member: any) {
   movingMember.value = member
-  moveDeptId.value = member.department?.id || null
+  moveDeptId.value = member.dept_id ?? null
   showMoveDeptDialog.value = true
 }
 

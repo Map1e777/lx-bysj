@@ -152,24 +152,31 @@ router.put('/members/:uid/role', async (req, res) => {
     const orgId = req.orgContextId
     const normalizedRole = org_role || role
 
-    if (!normalizedRole) {
-      return res.status(400).json({ code: 400, message: '角色不能为空' })
-    }
-
     const user = await db.get('SELECT * FROM users WHERE id = ? AND org_id = ?', [targetId, orgId])
     if (!user) {
       return res.status(404).json({ code: 404, message: '成员不存在' })
     }
 
-    const updates = ['org_role = ?', 'updated_at = CURRENT_TIMESTAMP']
-    const values = [normalizedRole]
+    const updates = ['updated_at = CURRENT_TIMESTAMP']
+    const values = []
 
-    if (dept_id !== undefined) { updates.push('dept_id = ?'); values.push(dept_id) }
+    if (normalizedRole !== undefined) {
+      updates.push('org_role = ?')
+      values.push(normalizedRole)
+    }
+    if (dept_id !== undefined) {
+      updates.push('dept_id = ?')
+      values.push(dept_id || null)
+    }
+
+    if (updates.length === 1) {
+      return res.status(400).json({ code: 400, message: '没有要更新的字段' })
+    }
 
     values.push(targetId)
     await db.run(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`, values)
 
-    return res.json({ code: 200, message: '角色已更新' })
+    return res.json({ code: 200, message: '成员信息已更新' })
   } catch (err) {
     console.error('Change org role error:', err)
     return res.status(500).json({ code: 500, message: '服务器错误' })
