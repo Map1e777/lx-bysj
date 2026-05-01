@@ -15,6 +15,11 @@
         <el-option label="系统管理员" value="system_admin" />
         <el-option label="普通用户" value="user" />
       </el-select>
+      <el-select v-model="statusFilter" placeholder="账号状态" style="width: 140px" @change="loadUsers">
+        <el-option label="正常用户" value="1" />
+        <el-option label="已禁用" value="0" />
+        <el-option label="全部状态" value="" />
+      </el-select>
       <el-select v-model="matrixRoleFilter" placeholder="角色矩阵" clearable style="width: 160px" @change="loadUsers">
         <el-option label="组织管理员" value="org_admin" />
         <el-option label="文档创作者" value="doc_creator" />
@@ -73,8 +78,8 @@
         </el-table-column>
         <el-table-column label="状态" width="90">
           <template #default="{ row }">
-            <el-tag :type="row.is_active !== false ? 'success' : 'danger'" size="small">
-              {{ row.is_active !== false ? '正常' : '禁用' }}
+            <el-tag :type="isUserActive(row) ? 'success' : 'danger'" size="small">
+              {{ isUserActive(row) ? '正常' : '禁用' }}
             </el-tag>
           </template>
         </el-table-column>
@@ -88,11 +93,11 @@
             <el-button link type="primary" size="small" @click="openEditUser(row)">编辑</el-button>
             <el-button
               link
-              :type="row.is_active !== false ? 'warning' : 'success'"
+              :type="isUserActive(row) ? 'warning' : 'success'"
               size="small"
               @click="toggleActive(row)"
             >
-              {{ row.is_active !== false ? '禁用' : '启用' }}
+              {{ isUserActive(row) ? '禁用' : '启用' }}
             </el-button>
             <el-button link type="danger" size="small" @click="deleteUser(row)">删除</el-button>
           </template>
@@ -157,6 +162,7 @@ const currentPage = ref(1)
 const pageSize = ref(20)
 const search = ref('')
 const roleFilter = ref('')
+const statusFilter = ref('1')
 const matrixRoleFilter = ref('')
 const orgFilter = ref<number | null>(null)
 const showUserDialog = ref(false)
@@ -197,10 +203,14 @@ async function loadUsers() {
       limit: pageSize.value,
       search: search.value || undefined,
       system_role: roleFilter.value || undefined,
+      is_active: statusFilter.value === '' ? undefined : statusFilter.value === '1' ? 1 : 0,
       role_code: matrixRoleFilter.value || undefined,
       org_id: orgFilter.value || undefined,
     }) as any
-    users.value = res.data?.list || []
+    users.value = (res.data?.list || []).map((user: any) => ({
+      ...user,
+      is_active: user.is_active === 1 || user.is_active === true
+    }))
     total.value = res.data?.total || 0
   } catch (e) {} finally {
     loading.value = false
@@ -270,7 +280,7 @@ async function saveUser() {
 
 async function toggleActive(user: any) {
   try {
-    const newStatus = user.is_active === false ? true : false
+    const newStatus = !isUserActive(user)
     await adminApi.updateUser(user.id, { is_active: newStatus })
     user.is_active = newStatus
     ElMessage.success(newStatus ? '用户已启用' : '用户已禁用')
@@ -281,15 +291,19 @@ async function toggleActive(user: any) {
 
 async function deleteUser(user: any) {
   try {
-    await ElMessageBox.confirm(`确定要删除用户 ${user.username} 吗？此操作不可撤销。`, '确认删除', {
+    await ElMessageBox.confirm(`确定要彻底删除用户 ${user.username} 吗？此操作不可撤销。`, '确认删除', {
       type: 'error', confirmButtonText: '删除'
     })
     await adminApi.deleteUser(user.id)
-    ElMessage.success('用户已删除')
+    ElMessage.success('用户已彻底删除')
     loadUsers()
   } catch (e: any) {
     if (e !== 'cancel') ElMessage.error('删除失败')
   }
+}
+
+function isUserActive(user: any) {
+  return user.is_active === true || user.is_active === 1
 }
 
 function formatDate(time: string) {

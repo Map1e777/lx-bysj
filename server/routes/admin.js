@@ -38,8 +38,9 @@ router.get('/users', async (req, res) => {
     }
     if (system_role) { conditions.push('u.system_role = ?'); params.push(system_role) }
     if (is_active !== undefined && is_active !== '') {
+      const normalizedActive = ['1', 'true', 1, true].includes(is_active) ? 1 : 0
       conditions.push('u.is_active = ?')
-      params.push(parseInt(is_active))
+      params.push(normalizedActive)
     }
     if (org_id) { conditions.push('u.org_id = ?'); params.push(parseInt(org_id)) }
     if (role_code === 'org_admin') {
@@ -95,8 +96,11 @@ router.post('/users', async (req, res) => {
       return res.status(400).json({ code: 400, message: '用户名、邮箱和密码不能为空' })
     }
 
-    const existing = await db.get('SELECT id FROM users WHERE username = ? OR email = ?', [username, email])
+    const existing = await db.get('SELECT id, username, email, is_active FROM users WHERE username = ? OR email = ?', [username, email])
     if (existing) {
+      if (!existing.is_active) {
+        return res.status(409).json({ code: 409, message: '该用户名或邮箱对应的账号已被停用，请在“已禁用”列表中重新启用' })
+      }
       return res.status(409).json({ code: 409, message: '用户名或邮箱已存在' })
     }
 
@@ -161,7 +165,10 @@ router.put('/users/:id', async (req, res) => {
 // DELETE /api/admin/users/:id
 router.delete('/users/:id', async (req, res) => {
   try {
-    const user = await db.get('SELECT * FROM users WHERE id = ?', [req.params.id])
+    const userId = parseInt(req.params.id)
+    const currentUserId = req.user.id
+
+    const user = await db.get('SELECT * FROM users WHERE id = ?', [userId])
     if (!user) {
       return res.status(404).json({ code: 404, message: '用户不存在' })
     }
@@ -169,14 +176,52 @@ router.delete('/users/:id', async (req, res) => {
     if (user.system_role === 'system_admin') {
       const adminCountRow = await db.get("SELECT COUNT(*) as count FROM users WHERE system_role = 'system_admin' AND is_active = 1")
       if (adminCountRow.count <= 1) {
-        return res.status(400).json({ code: 400, message: '不能停用最后一个系统管理员' })
+        return res.status(400).json({ code: 400, message: '不能删除最后一个系统管理员' })
       }
     }
 
-    await db.run('UPDATE users SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [req.params.id])
-    return res.json({ code: 200, message: '用户已停用' })
+    await db.transaction(async (conn) => {
+      await conn.query('UPDATE orgs SET owner_id = NULL WHERE owner_id = ?', [userId])
+
+      // Remove documents created by this user first so document-level cascades can clean up their descendants.
+      await conn.query('DELETE FROM documents WHERE owner_id = ?', [userId])
+
+      // Reassign historical actor references that are still meaningful after the user is gone.
+      await conn.query(`
+        UPDATE document_versions dv
+        INNER JOIN documents d ON dv.document_id = d.id
+        SET dv.created_by = d.owner_id
+        WHERE dv.created_by = ?
+      `, [userId])
+      await conn.query(`
+        UPDATE document_permissions dp
+        INNER JOIN documents d ON dp.document_id = d.id
+        SET dp.granted_by = d.owner_id
+        WHERE dp.granted_by = ?
+      `, [userId])
+
+      // Clean up rows that still directly reference the user.
+      await conn.query('DELETE FROM document_permissions WHERE user_id = ?', [userId])
+      await conn.query('DELETE FROM invitations WHERE inviter_id = ?', [userId])
+      await conn.query('UPDATE invitations SET invitee_id = NULL WHERE invitee_id = ?', [userId])
+      await conn.query('DELETE FROM comments WHERE author_id = ?', [userId])
+      await conn.query('UPDATE comments SET resolved_by = NULL WHERE resolved_by = ?', [userId])
+      await conn.query('DELETE FROM attachments WHERE uploader_id = ?', [userId])
+      await conn.query('UPDATE audit_logs SET actor_id = NULL WHERE actor_id = ?', [userId])
+      await conn.query('UPDATE permission_templates SET created_by = NULL WHERE created_by = ?', [userId])
+      await conn.query('UPDATE system_config SET updated_by = NULL WHERE updated_by = ?', [userId])
+
+      // Finally remove the user record itself.
+      await conn.query('DELETE FROM users WHERE id = ?', [userId])
+    })
+
+    if (userId === currentUserId) {
+      return res.json({ code: 200, message: '当前账号已彻底删除，请重新登录' })
+    }
+
+    return res.json({ code: 200, message: '用户已彻底删除' })
   } catch (err) {
-    console.error('Admin deactivate user error:', err)
+    console.error('Admin delete user error:', err)
     return res.status(500).json({ code: 500, message: '服务器错误' })
   }
 })

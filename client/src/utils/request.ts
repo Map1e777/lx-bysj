@@ -26,11 +26,18 @@ request.interceptors.response.use(
     return data
   },
   (error) => {
+    const requestUrl = error.config?.url || ''
+    const isAuthEntry = requestUrl.includes('/auth/login') || requestUrl.includes('/auth/register')
+
     if (error.response?.status === 401) {
-      localStorage.removeItem('token')
-      localStorage.removeItem('user')
-      router.push('/login')
-      ElMessage.error('登录已过期，请重新登录')
+      if (isAuthEntry) {
+        ElMessage.error(error.response?.data?.message || '登录失败')
+      } else {
+        localStorage.removeItem('token')
+        localStorage.removeItem('user')
+        router.push('/login')
+        ElMessage.error(error.response?.data?.message || '登录已过期，请重新登录')
+      }
     } else if (error.response?.status === 403) {
       ElMessage.error(error.response?.data?.message || '权限不足')
     } else if (error.response?.status === 404) {
